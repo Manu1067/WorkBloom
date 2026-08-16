@@ -1,7 +1,6 @@
 package com.workbloom.employee.controller;
 
-import java.util.List;
-
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -25,27 +24,46 @@ public class EmployeeController {
         this.employeeService = employeeService;
     }
 
-    // Create Employee
+    // =========================================================
+    // CREATE EMPLOYEE
+    // =========================================================
+
     @PostMapping
     public ResponseEntity<EmployeeHRResponse> createEmployee(
             @RequestBody CreateEmployeeRequest request) {
 
-        EmployeeHRResponse response = employeeService.createEmployee(request);
+        EmployeeHRResponse response =
+                employeeService.createEmployee(request);
 
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
+        return new ResponseEntity<>(
+                response,
+                HttpStatus.CREATED
+        );
     }
 
-    // Get All Employees
-    @GetMapping
-    public ResponseEntity<List<EmployeeSummaryResponse>> getAllEmployees() {
+    // =========================================================
+    // GET ALL EMPLOYEES - PAGINATION
+    // =========================================================
 
-        List<EmployeeSummaryResponse> employees =
-                employeeService.getAllEmployees();
+    @GetMapping
+    public ResponseEntity<Page<EmployeeSummaryResponse>> getAllEmployees(
+
+            @RequestParam(defaultValue = "0")
+            int page,
+
+            @RequestParam(defaultValue = "10")
+            int size) {
+
+        Page<EmployeeSummaryResponse> employees =
+                employeeService.getAllEmployees(page, size);
 
         return ResponseEntity.ok(employees);
     }
 
-    // Get Employee By Id
+    // =========================================================
+    // GET EMPLOYEE BY ID
+    // =========================================================
+
     @GetMapping("/{id}")
     public ResponseEntity<EmployeeProfileResponse> getEmployeeById(
             @PathVariable Long id) {
@@ -56,7 +74,10 @@ public class EmployeeController {
         return ResponseEntity.ok(employee);
     }
 
-    // Update Employee (HR)
+    // =========================================================
+    // UPDATE EMPLOYEE - HR
+    // =========================================================
+
     @PutMapping("/{id}")
     public ResponseEntity<EmployeeHRResponse> updateEmployee(
             @PathVariable Long id,
@@ -68,37 +89,54 @@ public class EmployeeController {
         return ResponseEntity.ok(response);
     }
 
-    // Update Employee Profile
+    // =========================================================
+    // UPDATE EMPLOYEE PROFILE
+    // =========================================================
+
     @PutMapping("/{id}/profile")
     public ResponseEntity<EmployeeProfileResponse> updateEmployeeProfile(
             @PathVariable Long id,
             @RequestBody UpdateEmployeeProfileRequest request) {
 
         EmployeeProfileResponse response =
-                employeeService.updateEmployeeProfile(id, request);
+                employeeService.updateEmployeeProfile(
+                        id,
+                        request
+                );
 
         return ResponseEntity.ok(response);
     }
 
-    // Update Employee Status
+    // =========================================================
+    // UPDATE EMPLOYEE STATUS
+    // =========================================================
+
     @PatchMapping("/{id}/status")
     public ResponseEntity<EmployeeHRResponse> updateEmployeeStatus(
             @PathVariable Long id,
             @RequestBody UpdateEmployeeStatusRequest request) {
 
         EmployeeHRResponse response =
-                employeeService.updateEmployeeStatus(id, request);
+                employeeService.updateEmployeeStatus(
+                        id,
+                        request
+                );
 
         return ResponseEntity.ok(response);
     }
 
-    // Deactivate Employee
+    // =========================================================
+    // DEACTIVATE EMPLOYEE
+    // =========================================================
+
     @DeleteMapping("/{id}")
     public ResponseEntity<String> deactivateEmployee(
             @PathVariable Long id) {
 
         employeeService.deactivateEmployee(id);
 
-        return ResponseEntity.ok("Employee deactivated successfully.");
+        return ResponseEntity.ok(
+                "Employee deactivated successfully."
+        );
     }
 }

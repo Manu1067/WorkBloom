@@ -1,7 +1,6 @@
 package com.workbloom.employee.serviceimpl;
 
-import java.util.ArrayList;
-import java.util.List;
+
 
 import org.springframework.stereotype.Service;
 
@@ -17,6 +16,10 @@ import com.workbloom.employee.entity.EmployeeStatus;
 import com.workbloom.employee.repository.EmployeeRepository;
 import com.workbloom.employee.service.EmployeeService;
 
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 @Service
 public class EmployeeServiceImpl implements EmployeeService {
 
@@ -77,30 +80,47 @@ public class EmployeeServiceImpl implements EmployeeService {
         return response;
     }
 
-    @Override
-public List<EmployeeSummaryResponse> getAllEmployees() {
+  @Override
+public Page<EmployeeSummaryResponse> getAllEmployees(
+        int page,
+        int size) {
 
-    // Fetch all employees from database
-    List<Employee> employees = employeeRepository.findAll();
+    // Create pagination information
+    Pageable pageable =
+            PageRequest.of(page, size);
 
-    // List to store response DTOs
-    List<EmployeeSummaryResponse> responseList = new ArrayList<>();
+    // Fetch only the requested page
+    Page<Employee> employees =
+            employeeRepository.findAll(pageable);
 
-    // Convert each Employee to EmployeeSummaryResponse
-    for (Employee employee : employees) {
+    // Convert Employee -> EmployeeSummaryResponse
+    return employees.map(employee -> {
 
-        EmployeeSummaryResponse response = new EmployeeSummaryResponse();
+        EmployeeSummaryResponse response =
+                new EmployeeSummaryResponse();
 
         response.setId(employee.getId());
-        response.setEmployeeCode(employee.getEmployeeCode());
-        response.setFullName(employee.getFirstName() + " " + employee.getLastName());
-        response.setDepartment(employee.getDepartment());
-        response.setProfileImage(employee.getProfileImage());
 
-        responseList.add(response);
-    }
+        response.setEmployeeCode(
+                employee.getEmployeeCode()
+        );
 
-    return responseList;
+        response.setFullName(
+                employee.getFirstName()
+                        + " "
+                        + employee.getLastName()
+        );
+
+        response.setDepartment(
+                employee.getDepartment()
+        );
+
+        response.setProfileImage(
+                employee.getProfileImage()
+        );
+
+        return response;
+    });
 }
 
     

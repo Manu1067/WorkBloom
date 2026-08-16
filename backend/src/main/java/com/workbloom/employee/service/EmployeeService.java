@@ -1,6 +1,6 @@
 package com.workbloom.employee.service;
 
-import java.util.List;
+import org.springframework.data.domain.Page;
 
 import com.workbloom.employee.dto.CreateEmployeeRequest;
 import com.workbloom.employee.dto.EmployeeHRResponse;
@@ -10,24 +10,40 @@ import com.workbloom.employee.dto.UpdateEmployeeProfileRequest;
 import com.workbloom.employee.dto.UpdateEmployeeRequest;
 import com.workbloom.employee.dto.UpdateEmployeeStatusRequest;
 
+
 public interface EmployeeService {
 
     EmployeeHRResponse createEmployee(CreateEmployeeRequest request);
 
-    List<EmployeeSummaryResponse> getAllEmployees();
+    Page<EmployeeSummaryResponse> getAllEmployees(
+            int page,
+            int size
+    );
 
     EmployeeProfileResponse getEmployeeById(Long id);
 
-    EmployeeProfileResponse getEmployeeByEmployeeCode(String employeeCode);
+    EmployeeProfileResponse getEmployeeByEmployeeCode(
+            String employeeCode
+    );
 
-    EmployeeProfileResponse getEmployeeByEmail(String email);
+    EmployeeProfileResponse getEmployeeByEmail(
+            String email
+    );
 
-    EmployeeHRResponse updateEmployee(Long id, UpdateEmployeeRequest request);
+    EmployeeHRResponse updateEmployee(
+            Long id,
+            UpdateEmployeeRequest request
+    );
 
-    EmployeeProfileResponse updateEmployeeProfile(Long id, UpdateEmployeeProfileRequest request);
+    EmployeeProfileResponse updateEmployeeProfile(
+            Long id,
+            UpdateEmployeeProfileRequest request
+    );
 
-    EmployeeHRResponse updateEmployeeStatus(Long id, UpdateEmployeeStatusRequest request);
+    EmployeeHRResponse updateEmployeeStatus(
+            Long id,
+            UpdateEmployeeStatusRequest request
+    );
 
     void deactivateEmployee(Long id);
-
 }
