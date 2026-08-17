@@ -45,20 +45,40 @@ public class EmployeeController {
     // GET ALL EMPLOYEES - PAGINATION
     // =========================================================
 
-    @GetMapping
-    public ResponseEntity<Page<EmployeeSummaryResponse>> getAllEmployees(
+   @GetMapping
+public ResponseEntity<Page<EmployeeSummaryResponse>> getAllEmployees(
 
-            @RequestParam(defaultValue = "0")
-            int page,
+        @RequestParam(required = false)
+        String search,
 
-            @RequestParam(defaultValue = "10")
-            int size) {
+        @RequestParam(defaultValue = "0")
+        int page,
 
-        Page<EmployeeSummaryResponse> employees =
-                employeeService.getAllEmployees(page, size);
+        @RequestParam(defaultValue = "10")
+        int size) {
 
-        return ResponseEntity.ok(employees);
+    Page<EmployeeSummaryResponse> employees;
+
+    if (search == null || search.trim().isEmpty()) {
+
+        employees =
+                employeeService.getAllEmployees(
+                        page,
+                        size
+                );
+
+    } else {
+
+        employees =
+                employeeService.searchEmployees(
+                        search.trim(),
+                        page,
+                        size
+                );
     }
+
+    return ResponseEntity.ok(employees);
+}
 
     // =========================================================
     // GET EMPLOYEE BY ID

@@ -16,10 +16,15 @@ public interface EmployeeService {
     EmployeeHRResponse createEmployee(CreateEmployeeRequest request);
 
     Page<EmployeeSummaryResponse> getAllEmployees(
-            int page,
-            int size
-    );
+        int page,
+        int size
+      );
 
+Page<EmployeeSummaryResponse> searchEmployees(
+        String search,
+        int page,
+        int size
+);
     EmployeeProfileResponse getEmployeeById(Long id);
 
     EmployeeProfileResponse getEmployeeByEmployeeCode(

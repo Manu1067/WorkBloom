@@ -123,7 +123,53 @@ public Page<EmployeeSummaryResponse> getAllEmployees(
     });
 }
 
-    
+    @Override
+public Page<EmployeeSummaryResponse> searchEmployees(
+        String search,
+        int page,
+        int size) {
+
+    Pageable pageable =
+            PageRequest.of(page, size);
+
+    Page<Employee> employees =
+            employeeRepository.searchEmployees(
+                    search,
+                    pageable
+            );
+
+    return employees.map(employee -> {
+
+        EmployeeSummaryResponse response =
+                new EmployeeSummaryResponse();
+
+        response.setId(employee.getId());
+
+        response.setEmployeeCode(
+                employee.getEmployeeCode()
+        );
+
+        response.setFullName(
+                employee.getFirstName()
+                        + " "
+                        + employee.getLastName()
+        );
+
+        response.setDepartment(
+                employee.getDepartment()
+        );
+
+        response.setProfileImage(
+                employee.getProfileImage()
+        );
+
+        response.setStatus(
+                employee.getStatus()
+        );
+
+        return response;
+    });
+}
 
     @Override
 public EmployeeProfileResponse getEmployeeById(Long id) {
