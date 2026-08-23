@@ -1,10 +1,12 @@
 package com.workbloom.employee.controller;
 
 import org.springframework.data.domain.Page;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import com.workbloom.employee.dto.CreateEmployeeRequest;
 import com.workbloom.employee.dto.EmployeeHRResponse;
 import com.workbloom.employee.dto.EmployeeProfileResponse;
@@ -12,6 +14,7 @@ import com.workbloom.employee.dto.EmployeeSummaryResponse;
 import com.workbloom.employee.dto.UpdateEmployeeProfileRequest;
 import com.workbloom.employee.dto.UpdateEmployeeRequest;
 import com.workbloom.employee.dto.UpdateEmployeeStatusRequest;
+import com.workbloom.employee.entity.EmployeeStatus;
 import com.workbloom.employee.service.EmployeeService;
 
 @RestController
@@ -45,41 +48,36 @@ public class EmployeeController {
     // GET ALL EMPLOYEES - PAGINATION
     // =========================================================
 
-   @GetMapping
+ @GetMapping
 public ResponseEntity<Page<EmployeeSummaryResponse>> getAllEmployees(
 
         @RequestParam(required = false)
         String search,
 
-        @RequestParam(defaultValue = "0")
-        int page,
+        @RequestParam(required = false)
+        String department,
 
-        @RequestParam(defaultValue = "10")
-        int size) {
+        @RequestParam(required = false)
+        EmployeeStatus status,
 
-    Page<EmployeeSummaryResponse> employees;
+        @PageableDefault(
+                page = 0,
+                size = 10,
+                sort = "id",
+                direction = Sort.Direction.ASC
+        )
+        Pageable pageable) {
 
-    if (search == null || search.trim().isEmpty()) {
-
-        employees =
-                employeeService.getAllEmployees(
-                        page,
-                        size
-                );
-
-    } else {
-
-        employees =
-                employeeService.searchEmployees(
-                        search.trim(),
-                        page,
-                        size
-                );
-    }
+    Page<EmployeeSummaryResponse> employees =
+            employeeService.searchAndFilterEmployees(
+                    search,
+                    department,
+                    status,
+                    pageable
+            );
 
     return ResponseEntity.ok(employees);
 }
-
     // =========================================================
     // GET EMPLOYEE BY ID
     // =========================================================

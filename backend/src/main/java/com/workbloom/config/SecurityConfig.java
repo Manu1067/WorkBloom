@@ -34,30 +34,40 @@ public class SecurityConfig {
 
         http
 
-            // Disable CSRF because we are using JWT
+            // =========================================================
+            // DISABLE CSRF
+            // =========================================================
+
             .csrf(csrf -> csrf.disable())
 
-            // JWT authentication is stateless
+            // =========================================================
+            // JWT AUTHENTICATION IS STATELESS
+            // =========================================================
+
             .sessionManagement(session ->
                 session.sessionCreationPolicy(
                     SessionCreationPolicy.STATELESS
                 )
             )
 
-            // Authorization rules
+            // =========================================================
+            // AUTHORIZATION RULES
+            // =========================================================
+
             .authorizeHttpRequests(auth -> auth
 
-                // =========================
+                // =====================================================
                 // PUBLIC AUTH ENDPOINTS
-                // =========================
+                // =====================================================
+
                 .requestMatchers("/api/auth/**")
                 .permitAll()
 
 
-                // =========================
+                // =====================================================
                 // EMPLOYEE MANAGEMENT
                 // HR + ADMIN
-                // =========================
+                // =====================================================
 
                 // Create employee
                 .requestMatchers(
@@ -99,16 +109,20 @@ public class SecurityConfig {
                 .hasAnyRole("HR", "ADMIN")
 
 
-                // =========================
+                // =====================================================
                 // EMPLOYEE PROFILE
-                // =========================
+                // =====================================================
 
                 // View employee profile
                 .requestMatchers(
                     HttpMethod.GET,
                     "/api/employees/{id}"
                 )
-                .hasAnyRole("ADMIN", "HR", "EMPLOYEE")
+                .hasAnyRole(
+                    "ADMIN",
+                    "HR",
+                    "EMPLOYEE"
+                )
 
 
                 // Update employee profile
@@ -116,28 +130,155 @@ public class SecurityConfig {
                     HttpMethod.PUT,
                     "/api/employees/{id}/profile"
                 )
-                .hasAnyRole("ADMIN", "HR", "EMPLOYEE")
+                .hasAnyRole(
+                    "ADMIN",
+                    "HR",
+                    "EMPLOYEE"
+                )
 
 
-                // =========================
+                // =====================================================
+                // LEAVE MANAGEMENT
+                // =====================================================
+
+                // -----------------------------------------------------
+                // Apply for leave
+                // EMPLOYEE + HR + ADMIN
+                // -----------------------------------------------------
+
+                .requestMatchers(
+                    HttpMethod.POST,
+                    "/api/leaves"
+                )
+                .hasAnyRole(
+                    "EMPLOYEE",
+                    "HR",
+                    "ADMIN"
+                )
+
+
+                // -----------------------------------------------------
+                // View employee's leaves
+                // EMPLOYEE + HR + ADMIN
+                // -----------------------------------------------------
+
+                .requestMatchers(
+                    HttpMethod.GET,
+                    "/api/leaves/employee/**"
+                )
+                .hasAnyRole(
+                    "EMPLOYEE",
+                    "HR",
+                    "ADMIN"
+                )
+
+
+                // -----------------------------------------------------
+                // View ALL leaves
+                // HR + ADMIN
+                // -----------------------------------------------------
+
+                .requestMatchers(
+                    HttpMethod.GET,
+                    "/api/leaves"
+                )
+                .hasAnyRole(
+                    "HR",
+                    "ADMIN"
+                )
+
+
+                // -----------------------------------------------------
+                // View specific leave
+                // HR + ADMIN
+                // -----------------------------------------------------
+
+                .requestMatchers(
+                    HttpMethod.GET,
+                    "/api/leaves/*"
+                )
+                .hasAnyRole(
+                    "HR",
+                    "ADMIN"
+                )
+
+
+                // -----------------------------------------------------
+                // Approve leave
+                // HR + ADMIN
+                // -----------------------------------------------------
+
+                .requestMatchers(
+                    HttpMethod.PATCH,
+                    "/api/leaves/*/approve"
+                )
+                .hasAnyRole(
+                    "HR",
+                    "ADMIN"
+                )
+
+
+                // -----------------------------------------------------
+                // Reject leave
+                // HR + ADMIN
+                // -----------------------------------------------------
+
+                .requestMatchers(
+                    HttpMethod.PATCH,
+                    "/api/leaves/*/reject"
+                )
+                .hasAnyRole(
+                    "HR",
+                    "ADMIN"
+                )
+
+
+                // -----------------------------------------------------
+                // Cancel leave
+                // EMPLOYEE + HR + ADMIN
+                // -----------------------------------------------------
+
+                .requestMatchers(
+                    HttpMethod.PATCH,
+                    "/api/leaves/*/cancel"
+                )
+                .hasAnyRole(
+                    "EMPLOYEE",
+                    "HR",
+                    "ADMIN"
+                )
+
+
+                // =====================================================
                 // EVERYTHING ELSE
-                // =========================
+                // =====================================================
 
                 .anyRequest()
                 .authenticated()
-            )
 
-            // Disable browser login
+            )
+            // =========================================================
+            // DISABLE BASIC AUTH
+            // =========================================================
+
             .httpBasic(httpBasic ->
                 httpBasic.disable()
             )
+
+
+            // =========================================================
+            // DISABLE FORM LOGIN
+            // =========================================================
 
             .formLogin(formLogin ->
                 formLogin.disable()
             )
 
-            // JWT filter runs before Spring's
-            // username/password authentication filter
+
+            // =========================================================
+            // JWT FILTER
+            // =========================================================
+
             .addFilterBefore(
                 jwtAuthenticationFilter,
                 UsernamePasswordAuthenticationFilter.class

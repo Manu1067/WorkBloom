@@ -15,11 +15,11 @@ import com.workbloom.employee.entity.Employee;
 import com.workbloom.employee.entity.EmployeeStatus;
 import com.workbloom.employee.repository.EmployeeRepository;
 import com.workbloom.employee.service.EmployeeService;
-
-
+import com.workbloom.employee.specification.EmployeeSpecification;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 @Service
 public class EmployeeServiceImpl implements EmployeeService {
 
@@ -122,19 +122,24 @@ public Page<EmployeeSummaryResponse> getAllEmployees(
         return response;
     });
 }
-
-    @Override
-public Page<EmployeeSummaryResponse> searchEmployees(
+@Override
+public Page<EmployeeSummaryResponse> searchAndFilterEmployees(
         String search,
-        int page,
-        int size) {
+        String department,
+        EmployeeStatus status,
+        Pageable pageable) {
 
-    Pageable pageable =
-            PageRequest.of(page, size);
+  
+    Specification<Employee> specification =
+            EmployeeSpecification.filterEmployees(
+                    search,
+                    department,
+                    status
+            );
 
     Page<Employee> employees =
-            employeeRepository.searchEmployees(
-                    search,
+            employeeRepository.findAll(
+                    specification,
                     pageable
             );
 
@@ -170,8 +175,8 @@ public Page<EmployeeSummaryResponse> searchEmployees(
         return response;
     });
 }
-
-    @Override
+  
+@Override
 public EmployeeProfileResponse getEmployeeById(Long id) {
 
     Employee employee = employeeRepository.findById(id)

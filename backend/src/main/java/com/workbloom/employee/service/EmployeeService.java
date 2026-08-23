@@ -1,5 +1,5 @@
 package com.workbloom.employee.service;
-
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Page;
 
 import com.workbloom.employee.dto.CreateEmployeeRequest;
@@ -9,6 +9,7 @@ import com.workbloom.employee.dto.EmployeeSummaryResponse;
 import com.workbloom.employee.dto.UpdateEmployeeProfileRequest;
 import com.workbloom.employee.dto.UpdateEmployeeRequest;
 import com.workbloom.employee.dto.UpdateEmployeeStatusRequest;
+import com.workbloom.employee.entity.EmployeeStatus;
 
 
 public interface EmployeeService {
@@ -20,10 +21,11 @@ public interface EmployeeService {
         int size
       );
 
-Page<EmployeeSummaryResponse> searchEmployees(
+Page<EmployeeSummaryResponse> searchAndFilterEmployees(
         String search,
-        int page,
-        int size
+        String department,
+        EmployeeStatus status,
+        Pageable pageable
 );
     EmployeeProfileResponse getEmployeeById(Long id);
 
