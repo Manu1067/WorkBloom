@@ -8,5 +8,7 @@ public enum NotificationType {
     EVENT,
     RECOGNITION,
     WELLNESS,
-    LEARNING
+    LEARNING,
+    COMMUNITY,
+    CLUB
 }

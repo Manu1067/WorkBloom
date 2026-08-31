@@ -1,0 +1,1 @@
+- [Imported backend runtime constraints](imported-backend-runtime.md) — match Maven Java targets to the active Replit JDK and provide PostgreSQL for context tests.

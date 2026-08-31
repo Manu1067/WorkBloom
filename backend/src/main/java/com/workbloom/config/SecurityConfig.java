@@ -63,6 +63,46 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**")
                 .permitAll()
 
+                // =====================================================
+                // WORKBLOOM MODULES
+                // =====================================================
+
+                // Dashboard employee view
+                .requestMatchers(
+                    HttpMethod.GET,
+                    "/api/dashboard/employee/**"
+                )
+                .hasAnyRole(
+                    "ADMIN",
+                    "HR",
+                    "EMPLOYEE"
+                )
+
+                // Dashboard administration statistics
+                .requestMatchers(
+                    HttpMethod.GET,
+                    "/api/dashboard/admin"
+                )
+                .hasAnyRole(
+                    "ADMIN",
+                    "HR"
+                )
+
+                // Travel, events, community, chat, and clubs are
+                // available to authenticated workforce members.
+                .requestMatchers(
+                    "/api/travel/**",
+                    "/api/events/**",
+                    "/api/community/**",
+                    "/api/chat/**",
+                    "/api/clubs/**"
+                )
+                .hasAnyRole(
+                    "ADMIN",
+                    "HR",
+                    "EMPLOYEE"
+                )
+
 
                 // =====================================================
                 // EMPLOYEE MANAGEMENT

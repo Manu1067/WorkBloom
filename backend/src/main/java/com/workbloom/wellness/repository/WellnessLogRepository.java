@@ -12,4 +12,8 @@ public interface WellnessLogRepository
         extends JpaRepository<WellnessLog, Long> {
 
     List<WellnessLog> findByEmployee_Id(Long employeeId);
+
+    List<WellnessLog> findByEmployee_IdOrderByRecordedAtDesc(
+            Long employeeId
+    );
 }
