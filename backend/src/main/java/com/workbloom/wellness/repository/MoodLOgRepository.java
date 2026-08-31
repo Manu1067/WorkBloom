@@ -11,5 +11,7 @@ import com.workbloom.wellness.entity.Moodlog;
 public interface MoodLogRepository
         extends JpaRepository<Moodlog, Long> {
 
-    List<Moodlog> findByEmployee_Id(Long employeeId);
+    List<Moodlog> findByEmployee_IdOrderByRecordedAtDesc(
+            Long employeeId
+    );
 }

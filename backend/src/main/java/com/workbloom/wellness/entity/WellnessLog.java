@@ -44,9 +44,7 @@ public class WellnessLog extends BaseEntity {
     @Column(nullable = false)
     private Integer stressLevel;
 
-    @Column(nullable = false)
-    private Integer sleepHours;
-
+   
     @Column(length = 500)
     private String note;
 
@@ -139,13 +137,7 @@ public class WellnessLog extends BaseEntity {
         this.stressLevel = stressLevel;
     }
 
-    public Integer getSleepHours() {
-        return sleepHours;
-    }
-
-    public void setSleepHours(Integer sleepHours) {
-        this.sleepHours = sleepHours;
-    }
+  
 
     // ==============================
     // NOTE

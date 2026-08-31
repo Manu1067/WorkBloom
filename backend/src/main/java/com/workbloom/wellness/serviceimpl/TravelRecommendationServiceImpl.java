@@ -42,8 +42,7 @@ public class TravelRecommendationServiceImpl
         // =====================================================
 
         List<Moodlog> moods =
-                moodLogRepository.findByEmployee_Id(employeeId);
-
+               moodLogRepository.findByEmployee_IdOrderByRecordedAtDesc(employeeId);
         Moodlog latestMood =
                 moods.isEmpty()
                         ? null

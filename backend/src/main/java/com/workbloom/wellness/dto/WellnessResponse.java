@@ -32,8 +32,7 @@ public class WellnessResponse {
 
     private Integer stressLevel;
 
-    private Integer sleepHours;
-
+    
     private String note;
 
     private LocalDateTime recordedAt;
@@ -146,13 +145,7 @@ public class WellnessResponse {
         this.stressLevel = stressLevel;
     }
 
-    public Integer getSleepHours() {
-        return sleepHours;
-    }
-
-    public void setSleepHours(Integer sleepHours) {
-        this.sleepHours = sleepHours;
-    }
+   
 
     // ==============================
     // NOTE

@@ -145,17 +145,8 @@ public class WellnessServiceImpl implements WellnessService {
                 stressLevel
         );
 
-        /*
-         * The current questionnaire collects sleep quality,
-         * not actual hours slept.
-         *
-         * We keep using the existing sleepHours field for
-         * compatibility with the current database structure.
-         */
-        wellnessLog.setSleepHours(
-                request.getSleepQuality()
-        );
-
+        
+        
         // =====================================================
         // SAVE NOTE AND TIMESTAMP
         // =====================================================
@@ -207,13 +198,12 @@ public class WellnessServiceImpl implements WellnessService {
     public List<WellnessResponse> getEmployeeMoodHistory(
             Long employeeId) {
 
-        return moodLogRepository
-                .findByEmployee_Id(employeeId)
-                .stream()
-                .map(this::mapMoodToResponse)
-                .toList();
-    }
-
+     return moodLogRepository
+        .findByEmployee_IdOrderByRecordedAtDesc(employeeId)
+        .stream()
+        .map(this::mapMoodToResponse)
+        .toList();
+            }
     // =========================================================
     // MOOD → RESPONSE
     // =========================================================
@@ -295,9 +285,7 @@ public class WellnessServiceImpl implements WellnessService {
                 wellnessLog.getEnergyLevel()
         );
 
-        response.setSleepHours(
-                wellnessLog.getSleepHours()
-        );
+       
 
         response.setNote(
                 wellnessLog.getNote()
