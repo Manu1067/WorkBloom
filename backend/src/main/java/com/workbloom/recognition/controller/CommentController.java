@@ -21,7 +21,10 @@ public class CommentController {
         this.recognitionService = recognitionService;
     }
 
+    // =========================================================
     // ADD COMMENT
+    // =========================================================
+
     @PostMapping("/{recognitionId}/comments")
     public ResponseEntity<CommentResponse> addComment(
             @PathVariable Long recognitionId,
@@ -37,7 +40,10 @@ public class CommentController {
         );
     }
 
+    // =========================================================
     // GET COMMENTS
+    // =========================================================
+
     @GetMapping("/{recognitionId}/comments")
     public ResponseEntity<List<CommentResponse>> getComments(
             @PathVariable Long recognitionId) {
@@ -49,7 +55,10 @@ public class CommentController {
         );
     }
 
+    // =========================================================
     // DELETE COMMENT
+    // =========================================================
+
     @DeleteMapping("/{recognitionId}/comments/{commentId}")
     public ResponseEntity<Void> deleteComment(
             @PathVariable Long recognitionId,
