@@ -1,0 +1,8 @@
+{
+  "name": "WorkBloom",
+  "description": "An Employee Experience & Well-being Platform to foster workplace culture, wellness, collaboration, mentorship, and community engagement.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
