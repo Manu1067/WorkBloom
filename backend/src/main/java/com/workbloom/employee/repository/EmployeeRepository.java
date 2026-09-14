@@ -1,0 +1,21 @@
+package com.workbloom.employee.repository;
+
+import java.util.Optional;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import com.workbloom.employee.entity.Employee;
+
+@Repository
+public interface EmployeeRepository
+        extends JpaRepository<Employee, Long>,
+                JpaSpecificationExecutor<Employee> {
+    Optional<Employee> findByEmail(String email);
+
+    Optional<Employee> findByEmployeeCode(String employeeCode);
+
+    boolean existsByEmail(String email);
+
+    boolean existsByEmployeeCode(String employeeCode);
+}
