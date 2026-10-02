@@ -2,9 +2,17 @@ package com.workbloom.employee.serviceimpl;
 
 
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import com.workbloom.employee.dto.CreateEmployeeRequest;
+import com.workbloom.exception.ConflictException;
+import com.workbloom.exception.ResourceNotFoundException;
 import com.workbloom.employee.dto.EmployeeHRResponse;
 import com.workbloom.employee.dto.EmployeeProfileResponse;
 import com.workbloom.employee.dto.EmployeeSummaryResponse;
@@ -23,10 +31,60 @@ import org.springframework.data.jpa.domain.Specification;
 @Service
 public class EmployeeServiceImpl implements EmployeeService {
 
+    private static final Logger log = LoggerFactory.getLogger(EmployeeServiceImpl.class);
+
     private final EmployeeRepository employeeRepository;
 
     public EmployeeServiceImpl(EmployeeRepository employeeRepository) {
         this.employeeRepository = employeeRepository;
+    }
+
+    // =========================================================
+    // OWNERSHIP CHECK (IDOR FIX)
+    //
+    // An EMPLOYEE-role user may only view/update the Employee record
+    // that belongs to them. HR/ADMIN are untouched by this check and
+    // keep whatever access SecurityConfig already grants them.
+    //
+    // The caller's identity comes ONLY from the authenticated JWT
+    // (SecurityContextHolder), never from the path/body. The current
+    // User<->Employee link is by unique email (same pattern already
+    // used by getEmployeeByEmail()), since there is no direct FK
+    // between the auth User and the Employee entity.
+    // =========================================================
+
+    private static final String ROLE_EMPLOYEE = "ROLE_EMPLOYEE";
+
+    private void enforceSelfAccessForEmployeeRole(Long requestedEmployeeId) {
+
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null) {
+            return;
+        }
+
+        boolean callerIsEmployeeRole = authentication.getAuthorities()
+                .stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(ROLE_EMPLOYEE::equals);
+
+        // HR / ADMIN: existing authorization design applies, unchanged.
+        if (!callerIsEmployeeRole) {
+            return;
+        }
+
+        String authenticatedEmail = authentication.getName();
+
+        Employee ownEmployee = employeeRepository
+                .findByEmail(authenticatedEmail)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Authenticated employee record not found"));
+
+        if (!ownEmployee.getId().equals(requestedEmployeeId)) {
+            throw new AccessDeniedException(
+                    "Employees may only access or update their own employee record.");
+        }
     }
 
     @Override
@@ -34,7 +92,7 @@ public class EmployeeServiceImpl implements EmployeeService {
 
         // Check if email already exists
         if (employeeRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Employee with this email already exists.");
+            throw new ConflictException("Employee with this email already exists.");
         }
 
         // Create Employee Entity
@@ -179,8 +237,10 @@ public Page<EmployeeSummaryResponse> searchAndFilterEmployees(
 @Override
 public EmployeeProfileResponse getEmployeeById(Long id) {
 
+    enforceSelfAccessForEmployeeRole(id);
+
     Employee employee = employeeRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Employee not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Employee not found"));
 
     EmployeeProfileResponse response = new EmployeeProfileResponse();
 
@@ -202,7 +262,7 @@ public EmployeeProfileResponse getEmployeeById(Long id) {
     @Override
     public EmployeeHRResponse updateEmployee (Long id, UpdateEmployeeRequest request) {
         Employee employee = employeeRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Employee not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Employee not found"));
 
     employee.setDepartment(request.getDepartment());
     employee.setDesignation(request.getDesignation());
@@ -237,8 +297,10 @@ public EmployeeProfileResponse updateEmployeeProfile(
         Long id,
         UpdateEmployeeProfileRequest request) {
 
+    enforceSelfAccessForEmployeeRole(id);
+
     Employee employee = employeeRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Employee not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Employee not found"));
 
     employee.setPhone(request.getPhone());
     employee.setProfileImage(request.getProfileImage());
@@ -266,22 +328,18 @@ public EmployeeHRResponse updateEmployeeStatus(
         Long id,
         UpdateEmployeeStatusRequest request) {
 
-    System.out.println("========== STATUS DEBUG ==========");
-    System.out.println("ID: " + id);
-    System.out.println("REQUEST STATUS: " + request.getStatus());
+    log.debug("Updating status for employeeId={} to {}", id, request.getStatus());
 
     Employee employee = employeeRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Employee not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Employee not found"));
 
-    System.out.println("OLD STATUS: " + employee.getStatus());
+    log.debug("employeeId={} old status was {}", id, employee.getStatus());
 
     employee.setStatus(request.getStatus());
 
-    System.out.println("NEW STATUS: " + employee.getStatus());
-
     Employee updatedEmployee = employeeRepository.save(employee);
 
-    System.out.println("SAVED STATUS: " + updatedEmployee.getStatus());
+    log.debug("employeeId={} status saved as {}", id, updatedEmployee.getStatus());
 
     EmployeeHRResponse response = new EmployeeHRResponse();
 
@@ -307,7 +365,7 @@ public EmployeeHRResponse updateEmployeeStatus(
 public void deactivateEmployee(Long id) {
 
     Employee employee = employeeRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Employee not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Employee not found"));
 
     employee.setStatus(EmployeeStatus.INACTIVE);
 
@@ -317,7 +375,7 @@ public void deactivateEmployee(Long id) {
 public EmployeeProfileResponse getEmployeeByEmail(String email) {
 
     Employee employee = employeeRepository.findByEmail(email)
-            .orElseThrow(() -> new RuntimeException("Employee not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Employee not found"));
 
     EmployeeProfileResponse response = new EmployeeProfileResponse();
 
@@ -339,7 +397,7 @@ public EmployeeProfileResponse getEmployeeByEmail(String email) {
 public EmployeeProfileResponse getEmployeeByEmployeeCode(String employeeCode) {
 
     Employee employee = employeeRepository.findByEmployeeCode(employeeCode)
-            .orElseThrow(() -> new RuntimeException("Employee not found"));
+            .orElseThrow(() -> new ResourceNotFoundException("Employee not found"));
 
     EmployeeProfileResponse response = new EmployeeProfileResponse();
 

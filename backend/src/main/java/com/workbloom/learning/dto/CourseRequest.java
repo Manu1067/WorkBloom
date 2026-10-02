@@ -2,6 +2,11 @@ package com.workbloom.learning.dto;
 
 public class CourseRequest {
 
+    // Response-only: the course's database id. GET /api/learning/courses returns
+    // this DTO, and without an id the UI had nothing to enroll with (-> null
+    // courseId -> "The given id must not be null"). Ignored when creating.
+    private Long id;
+
     private String title;
     private String description;
     private String instructor;
@@ -10,6 +15,14 @@ public class CourseRequest {
     private String courseUrl;
 
     public CourseRequest() {
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
     }
 
     public String getTitle() {

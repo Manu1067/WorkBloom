@@ -22,6 +22,10 @@ import com.workbloom.learning.repository.CourseEnrollmentRepository;
 import com.workbloom.learning.repository.CourseRepository;
 
 import com.workbloom.learning.service.LearningService;
+import com.workbloom.exception.BadRequestException;
+import com.workbloom.exception.ConflictException;
+import com.workbloom.exception.ForbiddenException;
+import com.workbloom.exception.ResourceNotFoundException;
 
 @Service
 @Transactional
@@ -112,6 +116,19 @@ public class LearningServiceImpl implements LearningService {
             EnrollmentRequest request) {
 
         // -----------------------------------------------------
+        // Validate input (a null id used to reach findById and fail
+        // with the unhelpful "The given id must not be null")
+        // -----------------------------------------------------
+
+        if (employeeId == null) {
+            throw new BadRequestException("employeeId is required");
+        }
+
+        if (request == null || request.getCourseId() == null) {
+            throw new BadRequestException("courseId is required");
+        }
+
+        // -----------------------------------------------------
         // Find employee
         // -----------------------------------------------------
 
@@ -119,7 +136,7 @@ public class LearningServiceImpl implements LearningService {
                 employeeRepository
                         .findById(employeeId)
                         .orElseThrow(() ->
-                                new RuntimeException(
+                                new ResourceNotFoundException(
                                         "Employee not found with ID: "
                                                 + employeeId
                                 )
@@ -133,7 +150,7 @@ public class LearningServiceImpl implements LearningService {
                 courseRepository
                         .findById(request.getCourseId())
                         .orElseThrow(() ->
-                                new RuntimeException(
+                                new ResourceNotFoundException(
                                         "Course not found with ID: "
                                                 + request.getCourseId()
                                 )
@@ -146,7 +163,7 @@ public class LearningServiceImpl implements LearningService {
         if (!Boolean.TRUE.equals(
                 course.getActive())) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "This course is not active"
             );
         }
@@ -162,7 +179,7 @@ public class LearningServiceImpl implements LearningService {
                 )
                 .isPresent()) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Employee is already enrolled in this course"
             );
         }
@@ -229,7 +246,7 @@ public class LearningServiceImpl implements LearningService {
         if (enrollment.getStatus()
                 == EnrollmentStatus.COMPLETED) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Course is already completed"
             );
         }
@@ -264,7 +281,7 @@ public class LearningServiceImpl implements LearningService {
         if (enrollment.getStatus()
                 == EnrollmentStatus.COMPLETED) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Course is already completed"
             );
         }
@@ -297,7 +314,7 @@ public class LearningServiceImpl implements LearningService {
                 enrollmentRepository
                         .findById(enrollmentId)
                         .orElseThrow(() ->
-                                new RuntimeException(
+                                new ResourceNotFoundException(
                                         "Enrollment not found with ID: "
                                                 + enrollmentId
                                 )
@@ -309,7 +326,7 @@ public class LearningServiceImpl implements LearningService {
                 .getId()
                 .equals(employeeId)) {
 
-            throw new RuntimeException(
+            throw new ForbiddenException(
                     "You cannot modify another employee's enrollment"
             );
         }
@@ -326,6 +343,10 @@ public class LearningServiceImpl implements LearningService {
 
         CourseRequest response =
                 new CourseRequest();
+
+        response.setId(
+                course.getId()
+        );
 
         response.setTitle(
                 course.getTitle()

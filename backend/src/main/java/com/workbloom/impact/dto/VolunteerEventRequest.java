@@ -11,6 +11,7 @@ public class VolunteerEventRequest {
     private LocalDate eventDate;
     private Integer maxVolunteers;
     private Boolean active;
+    private String imageUrl;
 
     public VolunteerEventRequest() {
     }
@@ -61,6 +62,14 @@ public class VolunteerEventRequest {
 
     public void setMaxVolunteers(Integer maxVolunteers) {
         this.maxVolunteers = maxVolunteers;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
     }
 
     public Boolean getActive() {

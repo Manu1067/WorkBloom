@@ -23,6 +23,10 @@ import com.workbloom.event.service.EventService;
 import com.workbloom.notification.dto.NotificationRequest;
 import com.workbloom.notification.entity.NotificationType;
 import com.workbloom.notification.service.NotificationService;
+import com.workbloom.exception.BadRequestException;
+import com.workbloom.exception.ConflictException;
+import com.workbloom.exception.ForbiddenException;
+import com.workbloom.exception.ResourceNotFoundException;
 
 @Service
 @Transactional
@@ -71,7 +75,7 @@ public class EventServiceImpl implements EventService {
         verifyOrganizer(event, organizerId);
 
         if (event.getStatus() == EventStatus.CANCELLED) {
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Cancelled events cannot be updated");
         }
 
@@ -165,12 +169,12 @@ public class EventServiceImpl implements EventService {
         Employee employee = findEmployee(employeeId);
 
         if (event.getStatus() != EventStatus.PUBLISHED) {
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Registrations are closed for this event");
         }
 
         if (hasEnded(event)) {
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Registration is closed because the event has ended");
         }
 
@@ -184,7 +188,7 @@ public class EventServiceImpl implements EventService {
 
         if (registration.getStatus()
                 == EventRegistrationStatus.REGISTERED) {
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Employee is already registered for this event");
         }
 
@@ -195,7 +199,7 @@ public class EventServiceImpl implements EventService {
                 );
 
         if (registeredCount >= event.getCapacity()) {
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Event capacity is full");
         }
 
@@ -239,17 +243,17 @@ public class EventServiceImpl implements EventService {
                                 employeeId
                         )
                         .orElseThrow(() ->
-                                new RuntimeException(
+                                new ResourceNotFoundException(
                                         "Event registration not found"));
 
         if (registration.getStatus()
                 != EventRegistrationStatus.REGISTERED) {
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Employee is not actively registered for this event");
         }
 
         if (hasEnded(event)) {
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Registration cannot be cancelled after the event has ended");
         }
 
@@ -300,13 +304,13 @@ public class EventServiceImpl implements EventService {
     private Employee findEmployee(Long employeeId) {
         return employeeRepository.findById(employeeId)
                 .orElseThrow(() ->
-                        new RuntimeException("Employee not found"));
+                        new ResourceNotFoundException("Employee not found"));
     }
 
     private Event findEvent(Long eventId) {
         return eventRepository.findById(eventId)
                 .orElseThrow(() ->
-                        new RuntimeException("Event not found"));
+                        new ResourceNotFoundException("Event not found"));
     }
 
     private EventResponse toResponse(Event event) {
@@ -324,7 +328,7 @@ public class EventServiceImpl implements EventService {
             Long organizerId) {
 
         if (!event.getOrganizer().getId().equals(organizerId)) {
-            throw new RuntimeException(
+            throw new ForbiddenException(
                     "Only the event organizer can manage this event");
         }
     }
@@ -341,40 +345,40 @@ public class EventServiceImpl implements EventService {
     private void validateRequest(EventRequest request) {
 
         if (request == null) {
-            throw new RuntimeException("Event details are required");
+            throw new BadRequestException("Event details are required");
         }
 
         if (isBlank(request.getTitle())) {
-            throw new RuntimeException("Event title is required");
+            throw new BadRequestException("Event title is required");
         }
 
         if (request.getEventDate() == null) {
-            throw new RuntimeException("Event date is required");
+            throw new BadRequestException("Event date is required");
         }
 
         if (request.getEventDate().isBefore(LocalDate.now())) {
-            throw new RuntimeException(
+            throw new BadRequestException(
                     "Event date cannot be in the past");
         }
 
         if (request.getStartTime() == null
                 || request.getEndTime() == null) {
-            throw new RuntimeException(
+            throw new BadRequestException(
                     "Event start and end times are required");
         }
 
         if (!request.getEndTime().isAfter(request.getStartTime())) {
-            throw new RuntimeException(
+            throw new BadRequestException(
                     "Event end time must be after start time");
         }
 
         if (isBlank(request.getLocation())) {
-            throw new RuntimeException("Event location is required");
+            throw new BadRequestException("Event location is required");
         }
 
         if (request.getCapacity() == null
                 || request.getCapacity() < 1) {
-            throw new RuntimeException(
+            throw new BadRequestException(
                     "Event capacity must be at least 1");
         }
     }

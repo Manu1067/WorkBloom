@@ -22,6 +22,11 @@ import com.workbloom.impact.repository.VolunteerEventRepository;
 import com.workbloom.impact.repository.VolunteerRegistrationRepository;
 
 import com.workbloom.impact.service.ImpactService;
+import com.workbloom.common.storage.ImageStorageService;
+import com.workbloom.exception.BadRequestException;
+import com.workbloom.exception.ConflictException;
+import com.workbloom.exception.ForbiddenException;
+import com.workbloom.exception.ResourceNotFoundException;
 
 @Service
 @Transactional
@@ -76,6 +81,17 @@ public class ImpactServiceImpl implements ImpactService {
 
         event.setActive(true);
 
+        // Optional banner. Only URLs issued by the upload endpoint
+        // (/uploads/impact/{uuid}.ext) are accepted - never arbitrary strings.
+        String imageUrl = request.getImageUrl();
+        if (imageUrl != null && !imageUrl.isBlank()) {
+            if (!ImageStorageService.isStoredImageUrl(imageUrl.trim())) {
+                throw new BadRequestException(
+                        "Invalid image reference. Upload the image first and use the returned URL.");
+            }
+            event.setImageUrl(imageUrl.trim());
+        }
+
         VolunteerEvent saved =
                 volunteerEventRepository.save(event);
 
@@ -114,7 +130,7 @@ public class ImpactServiceImpl implements ImpactService {
                 employeeRepository
                         .findById(employeeId)
                         .orElseThrow(() ->
-                                new RuntimeException(
+                                new ResourceNotFoundException(
                                         "Employee not found with ID: "
                                                 + employeeId
                                 )
@@ -128,7 +144,7 @@ public class ImpactServiceImpl implements ImpactService {
                 volunteerEventRepository
                         .findById(request.getEventId())
                         .orElseThrow(() ->
-                                new RuntimeException(
+                                new ResourceNotFoundException(
                                         "Volunteer event not found with ID: "
                                                 + request.getEventId()
                                 )
@@ -141,7 +157,7 @@ public class ImpactServiceImpl implements ImpactService {
         if (!Boolean.TRUE.equals(
                 event.getActive())) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "This volunteer event is not active"
             );
         }
@@ -157,7 +173,7 @@ public class ImpactServiceImpl implements ImpactService {
                 )
                 .isPresent()) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Employee is already registered for this event"
             );
         }
@@ -181,7 +197,7 @@ public class ImpactServiceImpl implements ImpactService {
             if (registeredCount
                     >= event.getMaxVolunteers()) {
 
-                throw new RuntimeException(
+                throw new ConflictException(
                         "Volunteer event is already full"
                 );
             }
@@ -242,7 +258,7 @@ public class ImpactServiceImpl implements ImpactService {
                 volunteerRegistrationRepository
                         .findById(registrationId)
                         .orElseThrow(() ->
-                                new RuntimeException(
+                                new ResourceNotFoundException(
                                         "Registration not found with ID: "
                                                 + registrationId
                                 )
@@ -257,7 +273,7 @@ public class ImpactServiceImpl implements ImpactService {
                 .getId()
                 .equals(employeeId)) {
 
-            throw new RuntimeException(
+            throw new ForbiddenException(
                     "You cannot cancel another employee's registration"
             );
         }
@@ -269,7 +285,7 @@ public class ImpactServiceImpl implements ImpactService {
         if (registration.getStatus()
                 == RegistrationStatus.CANCELLED) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Registration is already cancelled"
             );
         }
@@ -325,6 +341,10 @@ public class ImpactServiceImpl implements ImpactService {
 
         response.setActive(
                 event.getActive()
+        );
+
+        response.setImageUrl(
+                event.getImageUrl()
         );
 
         return response;

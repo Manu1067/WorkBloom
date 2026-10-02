@@ -16,6 +16,7 @@ import com.workbloom.wellness.entity.WellnessLog;
 import com.workbloom.wellness.repository.MoodLogRepository;
 import com.workbloom.wellness.repository.WellnessLogRepository;
 import com.workbloom.wellness.service.WellnessService;
+import com.workbloom.exception.ResourceNotFoundException;
 
 @Service
 @Transactional
@@ -46,7 +47,7 @@ public class WellnessServiceImpl implements WellnessService {
 
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() ->
-                        new RuntimeException("Employee not found"));
+                        new ResourceNotFoundException("Employee not found"));
 
         Moodlog moodLog = new Moodlog();
 
@@ -72,7 +73,7 @@ public class WellnessServiceImpl implements WellnessService {
 
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() ->
-                        new RuntimeException("Employee not found"));
+                        new ResourceNotFoundException("Employee not found"));
 
         // =====================================================
         // CALCULATE STRESS SCORE

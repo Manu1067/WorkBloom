@@ -1,6 +1,12 @@
-import { cloneElement, isValidElement, useCallback, useEffect, useId, useMemo, useState } from 'react'
-import { auth, clearSession, features, getToken, setSession } from './api'
+import { cloneElement, isValidElement, useCallback, useEffect, useId, useState } from 'react'
+import { authApi } from './api/authApi'
+import { dashboardApi } from './api/dashboardApi'
+import { notificationApi } from './api/notificationApi'
+import { getEmployeeId } from './api/apiClient'
 import { ToastProvider, useToast } from './components/ToastContext'
+import logoImg from './images/Workbloom_logo.jpeg'
+import { AuthProvider, useAuth } from './context/AuthContext'
+import { ProtectedRoute } from './routes/ProtectedRoute'
 
 import { DashboardView } from './pages/DashboardView'
 import { WellnessView } from './pages/WellnessView'
@@ -145,7 +151,7 @@ function AuthLayout({ children, mode }) {
     <main className="auth-shell">
       <aside className="auth-aside">
         <button className="brand" onClick={() => navigate('/login')} aria-label="Go to WorkBloom login">
-          <span className="brand-mark" />
+          <span className="brand-logo"><img src={logoImg} alt="WorkBloom logo" /></span>
           <span className="brand-name">WorkBloom</span>
         </button>
         <div>
@@ -163,6 +169,7 @@ function AuthLayout({ children, mode }) {
 function AuthPage({ kind, onSuccess }) {
   const isRegister = kind === 'register'
   const isForgot = kind === 'forgot'
+  const { login, register } = useAuth()
   const [form, setForm] = useState({ fullName: '', email: '', password: '', department: '', designation: '' })
   const [status, setStatus] = useState({ busy: false, error: '', done: false })
   const update = (event) => setForm((current) => ({ ...current, [event.target.name]: event.target.value }))
@@ -171,12 +178,23 @@ function AuthPage({ kind, onSuccess }) {
     event.preventDefault()
     setStatus({ busy: true, error: '', done: false })
     try {
-      const body = isRegister ? { fullName: form.fullName, email: form.email, password: form.password, department: form.department, designation: form.designation } : { email: form.email, ...(isForgot ? {} : { password: form.password }) }
-      const response = isForgot ? await auth.forgotPassword(body) : isRegister ? await auth.register(body) : await auth.login(body)
       if (isForgot) {
+        await authApi.forgotPassword({ email: form.email })
         setStatus({ busy: false, error: '', done: true })
+      } else if (isRegister) {
+        const response = await register({
+          fullName: form.fullName,
+          email: form.email,
+          password: form.password,
+          department: form.department,
+          designation: form.designation,
+        })
+        onSuccess(response)
       } else {
-        setSession(response)
+        const response = await login({
+          email: form.email,
+          password: form.password,
+        })
         onSuccess(response)
       }
     } catch (error) {
@@ -222,45 +240,27 @@ function AuthPage({ kind, onSuccess }) {
   )
 }
 
-function Sidebar({ path, navigate, user, open, setOpen, onRoleSwitch }) {
+function Sidebar({ path, navigate, open, setOpen }) {
+  const { user, logout } = useAuth()
   const go = (route) => { navigate(`/${route}`); setOpen(false) }
 
   return (
     <aside className={`sidebar ${open ? 'open' : ''}`}>
       <button className="brand" onClick={() => go('dashboard')} aria-label="Go to dashboard">
-        <span className="brand-mark" />
+        <span className="brand-logo"><img src={logoImg} alt="WorkBloom logo" /></span>
         <span className="brand-name">WorkBloom</span>
       </button>
 
-      {/* Role Indicator & Quick Switcher */}
+      {/* Role Indicator */}
       <div style={{ padding: '0 12px 18px', borderBottom: '1px solid hsl(var(--line) / 0.18)', marginBottom: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 10, color: 'hsl(var(--gold))', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>
-            Active Persona
+            Authenticated Role
           </span>
           <span className={`role-badge ${user?.role === 'ADMIN' ? 'role-admin' : user?.role === 'HR' ? 'role-hr' : 'role-employee'}`} style={{ fontSize: 9 }}>
             {user?.role || 'EMPLOYEE'}
           </span>
         </div>
-        <select
-          value={user?.role || 'EMPLOYEE'}
-          onChange={(e) => onRoleSwitch && onRoleSwitch(e.target.value)}
-          style={{
-            width: '100%',
-            background: 'hsl(var(--sage-deep) / 0.8)',
-            color: 'hsl(43 46% 96%)',
-            border: '1px solid hsl(var(--sky) / 0.25)',
-            borderRadius: 8,
-            fontSize: 11,
-            padding: '4px 8px',
-            outline: 'none',
-          }}
-          aria-label="Switch active role persona"
-        >
-          <option value="EMPLOYEE">Role: Employee (Standard)</option>
-          <option value="HR">Role: HR (People Ops & Salary)</option>
-          <option value="ADMIN">Role: Admin (Full Access)</option>
-        </select>
       </div>
 
       {navGroups.map((group) => (
@@ -293,7 +293,7 @@ function Sidebar({ path, navigate, user, open, setOpen, onRoleSwitch }) {
           <strong>{user?.fullName || 'Your profile'}</strong>
           <span>{user?.designation || user?.department || 'WorkBloom member'}</span>
         </div>
-        <button className="logout-button" onClick={() => { clearSession(); navigate('/login') }} aria-label="Sign out">
+        <button className="logout-button" onClick={() => { logout(); navigate('/login') }} aria-label="Sign out">
           <Icon name="logout" size={16} />
         </button>
       </div>
@@ -399,7 +399,8 @@ function SettingsModal({ open, onClose, user, navigate }) {
   )
 }
 
-function Shell({ path, navigate, user, children, onRoleSwitch, onUserUpdate }) {
+function Shell({ path, navigate, children }) {
+  const { user, updateUser } = useAuth()
   const [open, setOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
@@ -411,10 +412,11 @@ function Shell({ path, navigate, user, children, onRoleSwitch, onUserUpdate }) {
     : 'Notifications & updates'
 
   const toggleNotifications = async () => {
-    if (!notificationsOpen && user?.id) {
+    const empId = user?.id || user?.employeeId || getEmployeeId()
+    if (!notificationsOpen && empId) {
       try {
-        const list = await features.notifications(user.id)
-        setNotificationsList(list)
+        const list = await notificationApi.getMyNotifications(empId)
+        setNotificationsList(Array.isArray(list) ? list : [])
       } catch (e) {
         console.error(e)
       }
@@ -423,10 +425,13 @@ function Shell({ path, navigate, user, children, onRoleSwitch, onUserUpdate }) {
   }
 
   const handleMarkAllRead = async () => {
+    const empId = user?.id || user?.employeeId || getEmployeeId()
     try {
-      await features.markAllNotificationsRead()
+      if (empId) {
+        await notificationApi.markAllAsRead(empId)
+      }
       setNotificationsList((prev) => prev.map((n) => ({ ...n, read: true })))
-      if (onUserUpdate) onUserUpdate({ unreadNotificationCount: 0 })
+      updateUser({ unreadNotificationCount: 0 })
     } catch (e) {
       console.error(e)
     }
@@ -434,9 +439,9 @@ function Shell({ path, navigate, user, children, onRoleSwitch, onUserUpdate }) {
 
   const handleMarkOneRead = async (id) => {
     try {
-      await features.markNotificationRead(id)
+      await notificationApi.markAsRead(id)
       setNotificationsList((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n))
-      if (onUserUpdate) onUserUpdate({ unreadNotificationCount: Math.max(0, unreadCount - 1) })
+      updateUser({ unreadNotificationCount: Math.max(0, unreadCount - 1) })
     } catch (e) {
       console.error(e)
     }
@@ -447,10 +452,8 @@ function Shell({ path, navigate, user, children, onRoleSwitch, onUserUpdate }) {
       <Sidebar
         path={path}
         navigate={navigate}
-        user={user}
         open={open}
         setOpen={setOpen}
-        onRoleSwitch={onRoleSwitch}
       />
       <main className="main-area">
         <header className="topbar">
@@ -532,63 +535,62 @@ function Shell({ path, navigate, user, children, onRoleSwitch, onUserUpdate }) {
 
 function MainApp() {
   const [path, navigate] = useRoute()
-  const [user, setUser] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('workbloom_user') || 'null')
-    } catch {
-      return null
-    }
-  })
-  const addToast = useToast()
-  const token = getToken()
-
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem('workbloom_user', JSON.stringify(user))
-    }
-  }, [user])
+  const { user, isAuthenticated, isRestoringSession, employeeLinkStatus, updateUser } = useAuth()
 
   const refreshUser = useCallback(async (overrides = {}) => {
-    if (!user?.id) return
+    const empId = user?.employeeId || user?.id || getEmployeeId()
+    if (!empId) return
     try {
-      const fresh = await features.dashboard(user.id)
-      setUser((prev) => ({ ...prev, ...fresh, ...overrides }))
+      const fresh = await dashboardApi.getEmployeeDashboard(empId)
+      updateUser({ ...fresh, ...overrides })
     } catch (e) {
       console.error(e)
     }
-  }, [user?.id])
-
-  const handleRoleSwitch = async (newRole) => {
-    try {
-      const res = await auth.switchRole(newRole)
-      if (res.success) {
-        setUser((prev) => ({ ...prev, role: res.role, user: res.user }))
-        addToast(`Persona role switched to ${res.role}! 🛡️`)
-      }
-    } catch (err) {
-      addToast(err.message, 'error')
-    }
-  }
+  }, [user?.id, user?.employeeId, updateUser])
 
   const publicRoute = path === '/login' || path === '/register' || path === '/forgot-password' || path === '/'
 
   useEffect(() => {
-    if (!token && !publicRoute) navigate('/login')
-    if (token && publicRoute) navigate('/dashboard')
-  }, [token, publicRoute, navigate])
+    if (!isAuthenticated && !publicRoute) navigate('/login')
+    if (isAuthenticated && publicRoute) navigate('/dashboard')
+  }, [isAuthenticated, publicRoute, navigate])
 
-  if (!token || publicRoute) {
-    if (token && publicRoute) return null
+  if (!isAuthenticated || publicRoute) {
+    if (isAuthenticated && publicRoute) return null
     const kind = path === '/register' ? 'register' : path === '/forgot-password' ? 'forgot' : 'login'
     return (
       <AuthPage
         kind={kind}
-        onSuccess={(response) => {
-          const u = response?.user || response
-          setUser(u)
+        onSuccess={() => {
           navigate('/dashboard')
         }}
       />
+    )
+  }
+
+  // While resolving the real employeeId on a returning session (page
+  // refresh with an existing token), hold off rendering pages rather
+  // than letting them briefly read a stale/guessed employeeId.
+  if (isRestoringSession) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'hsl(var(--muted))' }}>
+        Restoring your session…
+      </div>
+    )
+  }
+
+  // An authenticated account with no linked Employee record yet (e.g. a
+  // just-self-registered user HR hasn't onboarded). Every other module
+  // needs an employeeId to function, so show one clear message instead
+  // of letting each page fail confusingly in its own way.
+  if (employeeLinkStatus === 'unlinked') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 12, padding: 24, textAlign: 'center' }}>
+        <h2 style={{ margin: 0 }}>Your account isn't linked to an employee profile yet</h2>
+        <p style={{ color: 'hsl(var(--muted))', maxWidth: 420 }}>
+          Your login works, but HR hasn't set up your employee record yet. Please contact HR/Admin to get your employee profile created, then sign in again.
+        </p>
+      </div>
     )
   }
 
@@ -619,31 +621,32 @@ function MainApp() {
       case '/directory':
         return <DirectoryView user={user} navigate={navigate} />
       case '/analytics':
-        return <AnalyticsView user={user} onRoleSwitch={handleRoleSwitch} />
+        return <AnalyticsView user={user} />
       case '/profile':
-        return <ProfileView user={user} onUserUpdate={(diff) => setUser((p) => ({ ...p, ...diff }))} />
+        return <ProfileView user={user} onUserUpdate={(diff) => updateUser(diff)} />
       default:
         return <DashboardView user={user} navigate={navigate} onUserUpdate={refreshUser} />
     }
   }
 
   return (
-    <Shell
-      path={path}
-      navigate={navigate}
-      user={user}
-      onRoleSwitch={handleRoleSwitch}
-      onUserUpdate={(diff) => setUser((p) => ({ ...p, ...diff }))}
-    >
-      {renderContent()}
-    </Shell>
+    <ProtectedRoute navigate={navigate}>
+      <Shell
+        path={path}
+        navigate={navigate}
+      >
+        {renderContent()}
+      </Shell>
+    </ProtectedRoute>
   )
 }
 
 export default function App() {
   return (
     <ToastProvider>
-      <MainApp />
+      <AuthProvider>
+        <MainApp />
+      </AuthProvider>
     </ToastProvider>
   )
 }

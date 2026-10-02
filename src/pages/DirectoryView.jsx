@@ -1,52 +1,96 @@
 import { useState, useEffect } from 'react'
-import { employees } from '../api'
+import { employeeApi } from '../api/employeeApi'
 import { useToast } from '../components/ToastContext'
 
 export function DirectoryView({ user, navigate }) {
-  const [list, setList] = useState([])
+  const [employees, setEmployees] = useState([])
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalElements, setTotalElements] = useState(0)
+  const [page, setPage] = useState(0)
   const [search, setSearch] = useState('')
-  const [dept, setDept] = useState('All')
+  const [department, setDepartment] = useState('')
+  const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+
   const [selectedEmp, setSelectedEmp] = useState(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [empDetail, setEmpDetail] = useState(null)
   const addToast = useToast()
 
-  const loadEmployees = async () => {
+  const loadDirectory = async () => {
     try {
       setLoading(true)
-      const params = {}
-      if (search) params.search = search
-      if (dept !== 'All') params.department = dept
-      const data = await employees.list(params)
-      setList(data.employees || [])
+      const params = {
+        page,
+        size: 9,
+      }
+      if (search.trim()) params.search = search.trim()
+      if (department) params.department = department
+      if (status) params.status = status
+
+      const res = await employeeApi.getAll(params)
+      // Spring Boot Page object handles both pageable structure and direct arrays
+      if (res && Array.isArray(res.content)) {
+        setEmployees(res.content)
+        setTotalPages(res.totalPages || 1)
+        setTotalElements(res.totalElements || res.content.length)
+      } else if (Array.isArray(res)) {
+        setEmployees(res)
+        setTotalPages(1)
+        setTotalElements(res.length)
+      } else {
+        setEmployees([])
+        setTotalPages(1)
+        setTotalElements(0)
+      }
       setError(null)
     } catch (err) {
-      setError(err.message || 'Could not load colleague directory')
+      setError(err.message || 'Could not load employee directory')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    loadEmployees()
-  }, [search, dept])
+    loadDirectory()
+  }, [page, department, status])
 
-  const isHrOrAdmin = user?.role === 'HR' || user?.role === 'ADMIN'
+  const handleSearchSubmit = (e) => {
+    e.preventDefault()
+    setPage(0)
+    loadDirectory()
+  }
+
+  const handleOpenDetail = async (empId) => {
+    try {
+      setSelectedEmp(empId)
+      setDetailLoading(true)
+      setEmpDetail(null)
+      const detail = await employeeApi.getById(empId)
+      setEmpDetail(detail)
+    } catch (err) {
+      addToast(err.message || 'Could not load employee details', 'error')
+    } finally {
+      setDetailLoading(false)
+    }
+  }
 
   return (
     <div className="content page-shell">
-      <div className="module-hero" style={{ marginBottom: 28 }}>
-        <p className="eyebrow" style={{ color: 'hsl(var(--sage))' }}>People & Culture</p>
-        <h1>Colleague Directory</h1>
-        <p className="subtitle" style={{ maxWidth: 580 }}>
-          Meet the humans behind WorkBloom. Search by name, craft, or department.
+      <div className="module-hero" style={{ marginBottom: 24 }}>
+        <p className="eyebrow" style={{ color: 'hsl(var(--sage-dark))', fontWeight: 600 }}>People & Culture</p>
+        <h1 style={{ fontSize: 32, marginBottom: 6 }}>Employee Directory</h1>
+        <p className="subtitle" style={{ maxWidth: 580, color: 'hsl(var(--ink) / 0.85)' }}>
+          Discover and connect with your colleagues across departments.
         </p>
       </div>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+      {/* Search & Filter Bar */}
+      <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
         <input
           type="search"
-          placeholder="Search by name, role, or craft..."
+          placeholder="Search by name or keyword..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{
@@ -60,8 +104,11 @@ export function DirectoryView({ user, navigate }) {
         />
 
         <select
-          value={dept}
-          onChange={(e) => setDept(e.target.value)}
+          value={department}
+          onChange={(e) => {
+            setDepartment(e.target.value)
+            setPage(0)
+          }}
           style={{
             padding: '10px 14px',
             borderRadius: 12,
@@ -70,151 +117,270 @@ export function DirectoryView({ user, navigate }) {
             outline: 'none',
           }}
         >
-          <option value="All">All Departments</option>
-          <option value="Experience & Culture">Experience & Culture</option>
+          <option value="">All Departments</option>
           <option value="Engineering">Engineering</option>
-          <option value="Product & Design">Product & Design</option>
-          <option value="People & Wellbeing">People & Wellbeing</option>
+          <option value="Product">Product</option>
+          <option value="Design">Design</option>
+          <option value="HR">HR</option>
+          <option value="People & Culture">People & Culture</option>
+          <option value="Marketing">Marketing</option>
+          <option value="Sales">Sales</option>
         </select>
-      </div>
 
+        <select
+          value={status}
+          onChange={(e) => {
+            setStatus(e.target.value)
+            setPage(0)
+          }}
+          style={{
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid hsl(var(--line))',
+            background: 'hsl(var(--paper))',
+            outline: 'none',
+          }}
+        >
+          <option value="">All Statuses</option>
+          <option value="ACTIVE">Active</option>
+          <option value="INACTIVE">Inactive</option>
+          <option value="ON_LEAVE">On Leave</option>
+        </select>
+
+        <button type="submit" className="button button-primary" style={{ padding: '10px 18px' }}>
+          Search
+        </button>
+      </form>
+
+      {/* Loading Skeleton */}
       {loading && (
-        <div style={{ display: 'grid', gap: 16 }}>
-          <div className="skeleton" style={{ height: 120 }} />
-          <div className="skeleton" style={{ height: 120 }} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="skeleton" style={{ height: 160, borderRadius: 14 }} />
+          ))}
         </div>
       )}
 
-      {error && <div className="alert">{error}</div>}
+      {/* Error Alert */}
+      {error && !loading && (
+        <div className="alert" style={{ background: 'hsl(var(--coral-soft) / 0.4)', padding: 16, borderRadius: 12, marginBottom: 20 }}>
+          {error}
+        </div>
+      )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 16 }}>
-        {list.map((emp) => {
-          const isSelf = emp.id === user.id
-          const canSeeSalary = isHrOrAdmin || isSelf
+      {/* Empty State */}
+      {!loading && !error && employees.length === 0 && (
+        <div className="card card-pad" style={{ textAlign: 'center', padding: 40, color: 'hsl(var(--muted))' }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div>
+          <h3 style={{ margin: 0, fontSize: 18, color: 'hsl(var(--ink))' }}>No employees match your search.</h3>
+          <p style={{ margin: '4px 0 16px', fontSize: 13 }}>Try adjusting your search filters or clearing the search query.</p>
+          <button
+            className="button button-quiet"
+            onClick={() => {
+              setSearch('')
+              setDepartment('')
+              setStatus('')
+              setPage(0)
+            }}
+          >
+            Reset Filters
+          </button>
+        </div>
+      )}
 
-          return (
-            <div
-              key={emp.id}
-              className="card card-pad"
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                cursor: 'pointer',
-              }}
-              onClick={() => setSelectedEmp(emp)}
-            >
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: 18 }}>{emp.fullName}</h3>
-                    <p style={{ margin: '2px 0 0', fontSize: 12, color: 'hsl(var(--muted))' }}>
-                      {emp.designation}
-                    </p>
+      {/* Employee Cards Grid */}
+      {!loading && !error && employees.length > 0 && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 16, marginBottom: 24 }}>
+            {employees.map((emp) => (
+              <div
+                key={emp.id}
+                className="card card-pad"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  cursor: 'pointer',
+                  border: '1px solid hsl(var(--line))',
+                  borderRadius: 14,
+                  transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                }}
+                onClick={() => handleOpenDetail(emp.id)}
+              >
+                <div>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+                    {emp.profileImage ? (
+                      <img
+                        src={emp.profileImage}
+                        alt={emp.fullName}
+                        style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: '50%',
+                          background: 'hsl(var(--sage-dark))',
+                          color: '#ffffff',
+                          display: 'grid',
+                          placeItems: 'center',
+                          fontWeight: 700,
+                          fontSize: 18,
+                        }}
+                      >
+                        {emp.fullName ? emp.fullName.charAt(0) : 'E'}
+                      </div>
+                    )}
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: 16 }}>{emp.fullName}</h3>
+                      <span style={{ fontSize: 11, color: 'hsl(var(--muted))' }}>{emp.employeeCode || `ID: #${emp.id}`}</span>
+                    </div>
                   </div>
-                  <span className={`role-badge ${emp.role === 'ADMIN' ? 'role-admin' : emp.role === 'HR' ? 'role-hr' : 'role-employee'}`}>
-                    {emp.role}
-                  </span>
-                </div>
 
-                <div style={{ fontSize: 11, color: 'hsl(var(--sage))', fontWeight: 600, marginTop: 6 }}>
-                  {emp.department}
-                </div>
-
-                <div style={{ marginTop: 12, fontSize: 12, color: 'hsl(var(--muted))' }}>
-                  {emp.email}
-                </div>
-              </div>
-
-              <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid hsl(var(--line) / 0.6)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: 11 }}>
-                  <span style={{ color: 'hsl(var(--muted))' }}>Salary: </span>
-                  {canSeeSalary && emp.salary ? (
-                    <strong style={{ color: 'hsl(var(--sage-dark))' }}>
-                      ${emp.salary.toLocaleString()}
-                      {isHrOrAdmin && !isSelf && <span style={{ fontSize: 9, color: 'hsl(var(--coral))' }}> (HR)</span>}
-                    </strong>
-                  ) : (
-                    <span style={{ color: 'hsl(var(--muted))', fontStyle: 'italic' }}>
-                      🔒 Confidential
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+                    <span style={{ fontWeight: 600, color: 'hsl(var(--sage-dark))' }}>{emp.department || 'General'}</span>
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: 6,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        background: emp.status === 'ACTIVE' ? 'hsl(var(--sage-soft))' : 'hsl(var(--canvas))',
+                        color: emp.status === 'ACTIVE' ? 'hsl(var(--sage-dark))' : 'hsl(var(--muted))',
+                      }}
+                    >
+                      {emp.status || 'ACTIVE'}
                     </span>
-                  )}
+                  </div>
                 </div>
 
-                <button
-                  className="button button-quiet"
-                  style={{ fontSize: 10, padding: '4px 8px' }}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setSelectedEmp(emp)
-                  }}
-                >
-                  View details →
-                </button>
+                <div style={{ marginTop: 16, paddingTop: 10, borderTop: '1px solid hsl(var(--line) / 0.5)', display: 'flex', justifyContent: 'flex-end' }}>
+                  <button className="text-link" style={{ fontSize: 11, color: 'hsl(var(--sage-dark))', fontWeight: 600 }}>
+                    View full profile →
+                  </button>
+                </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            ))}
+          </div>
 
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 20 }}>
+              <button
+                className="button button-quiet"
+                disabled={page === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+              >
+                ← Previous
+              </button>
+              <span style={{ fontSize: 13, color: 'hsl(var(--muted))' }}>
+                Page {page + 1} of {totalPages} ({totalElements} employees)
+              </span>
+              <button
+                className="button button-quiet"
+                disabled={page >= totalPages - 1}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next →
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Employee Detail Modal */}
       {selectedEmp && (
         <div className="modal-backdrop" onClick={() => setSelectedEmp(null)}>
-          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div>
-                <p className="eyebrow" style={{ color: 'hsl(var(--sage))' }}>Colleague Profile</p>
-                <h2 style={{ margin: 0, fontSize: 22 }}>{selectedEmp.fullName}</h2>
-              </div>
+          <div className="modal-dialog" style={{ maxWidth: 480, padding: 24 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontSize: 20 }}>Colleague Details</h2>
               <button className="modal-close-btn" onClick={() => setSelectedEmp(null)}>✕</button>
             </div>
 
-            <div className="detail-list">
-              <div className="detail-row">
-                <span>Role & Title</span>
-                <strong>{selectedEmp.designation}</strong>
+            {detailLoading ? (
+              <div style={{ padding: 20, textAlign: 'center' }}>
+                <div className="skeleton" style={{ height: 120, borderRadius: 12 }} />
               </div>
-              <div className="detail-row">
-                <span>Department</span>
-                <strong>{selectedEmp.department}</strong>
-              </div>
-              <div className="detail-row">
-                <span>System Role</span>
-                <strong className={`role-badge ${selectedEmp.role === 'ADMIN' ? 'role-admin' : selectedEmp.role === 'HR' ? 'role-hr' : 'role-employee'}`}>
-                  {selectedEmp.role}
-                </strong>
-              </div>
-              <div className="detail-row">
-                <span>Email</span>
-                <strong>{selectedEmp.email}</strong>
-              </div>
-              <div className="detail-row">
-                <span>Annual Compensation</span>
-                <strong>
-                  {isHrOrAdmin || selectedEmp.id === user.id ? (
-                    `$${(selectedEmp.salary || 120000).toLocaleString()}`
+            ) : empDetail ? (
+              <div>
+                <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                  {empDetail.profileImage ? (
+                    <img
+                      src={empDetail.profileImage}
+                      alt={empDetail.fullName || `${empDetail.firstName} ${empDetail.lastName}`}
+                      style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', margin: '0 auto 10px' }}
+                    />
                   ) : (
-                    '🔒 Masked by Privacy Policy (HR only)'
+                    <div
+                      style={{
+                        width: 72,
+                        height: 72,
+                        borderRadius: '50%',
+                        background: 'hsl(var(--sage-dark))',
+                        color: '#ffffff',
+                        display: 'grid',
+                        placeItems: 'center',
+                        fontSize: 26,
+                        fontWeight: 700,
+                        margin: '0 auto 10px',
+                      }}
+                    >
+                      {empDetail.firstName ? empDetail.firstName.charAt(0) : 'E'}
+                    </div>
                   )}
-                </strong>
-              </div>
-              <div className="detail-row">
-                <span>Latest Mindful Mood</span>
-                <strong>{selectedEmp.latestMood || 'Steady'}</strong>
-              </div>
-            </div>
+                  <h3 style={{ margin: '0 0 2px', fontSize: 20 }}>
+                    {empDetail.firstName} {empDetail.lastName}
+                  </h3>
+                  <p style={{ margin: 0, fontSize: 13, color: 'hsl(var(--muted))' }}>
+                    {empDetail.designation || 'Team Member'} · {empDetail.department}
+                  </p>
+                </div>
 
-            <div style={{ marginTop: 20, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button className="button button-quiet" onClick={() => setSelectedEmp(null)}>Close</button>
-              <button
-                className="button button-primary"
-                onClick={() => {
-                  setSelectedEmp(null)
-                  navigate('/chat')
-                }}
-              >
-                Send message
-              </button>
-            </div>
+                <div className="detail-list" style={{ display: 'grid', gap: 10, fontSize: 13 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'hsl(var(--canvas) / 0.5)', borderRadius: 8 }}>
+                    <span style={{ color: 'hsl(var(--muted))' }}>Employee Code</span>
+                    <strong>{empDetail.employeeCode || `#${empDetail.id}`}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'hsl(var(--canvas) / 0.5)', borderRadius: 8 }}>
+                    <span style={{ color: 'hsl(var(--muted))' }}>Work Email</span>
+                    <strong>{empDetail.email || 'N/A'}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'hsl(var(--canvas) / 0.5)', borderRadius: 8 }}>
+                    <span style={{ color: 'hsl(var(--muted))' }}>Phone</span>
+                    <strong>{empDetail.phone || 'Not provided'}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'hsl(var(--canvas) / 0.5)', borderRadius: 8 }}>
+                    <span style={{ color: 'hsl(var(--muted))' }}>Joining Date</span>
+                    <strong>{empDetail.joiningDate ? new Date(empDetail.joiningDate).toLocaleDateString() : 'N/A'}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'hsl(var(--canvas) / 0.5)', borderRadius: 8 }}>
+                    <span style={{ color: 'hsl(var(--muted))' }}>Status</span>
+                    <strong style={{ color: 'hsl(var(--sage-dark))' }}>{empDetail.status || 'ACTIVE'}</strong>
+                  </div>
+                  {/* Security Scoping: Only display salary if backend actually returned it */}
+                  {empDetail.salary !== undefined && empDetail.salary !== null && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'hsl(var(--paper-warm))', borderRadius: 8, border: '1px solid hsl(var(--gold) / 0.4)' }}>
+                      <span style={{ color: 'hsl(var(--muted))' }}>Annual Compensation</span>
+                      <strong>${Number(empDetail.salary).toLocaleString()}</strong>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginTop: 20, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                  <button className="button button-quiet" onClick={() => setSelectedEmp(null)}>Close</button>
+                  <button
+                    className="button button-primary"
+                    onClick={() => {
+                      setSelectedEmp(null)
+                      navigate('/chat')
+                    }}
+                  >
+                    Send message
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       )}

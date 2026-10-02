@@ -24,6 +24,7 @@ import com.workbloom.wellness.entity.Moodlog;
 import com.workbloom.wellness.entity.WellnessLog;
 import com.workbloom.wellness.repository.MoodLogRepository;
 import com.workbloom.wellness.repository.WellnessLogRepository;
+import com.workbloom.exception.ResourceNotFoundException;
 
 @Service
 @Transactional(readOnly = true)
@@ -64,7 +65,7 @@ public class DashboardServiceImpl implements DashboardService {
 
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() ->
-                        new RuntimeException("Employee not found"));
+                        new ResourceNotFoundException("Employee not found"));
 
         EmployeeDashboardResponse response =
                 new EmployeeDashboardResponse();

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { APIProvider, Map, useMap, useMapsLibrary, AdvancedMarker, Pin } from '@vis.gl/react-google-maps'
+import { APIProvider, Map, useMap, useMapsLibrary, AdvancedMarker, Pin } from '../utils/googleMapsShim'
 
 // Internal tracking identifier required by Google Maps Platform guidelines
 const USAGE_ATTRIBUTION_ID = 'gmp_mcp_codeassist_v1_aistudio'

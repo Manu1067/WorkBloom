@@ -39,4 +39,7 @@ public interface EventRegistrationRepository
             Long employeeId,
             EventRegistrationStatus status
     );
+
+    // Added for Analytics (Task 4) - simple aggregate count, no new logic.
+    long countByStatus(EventRegistrationStatus status);
 }

@@ -29,4 +29,7 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     List<Event> findByOrganizer_IdOrderByEventDateDescStartTimeDesc(
             Long organizerId
     );
+
+    // Added for Analytics (Task 4) - simple aggregate count, no new logic.
+    long countByStatus(EventStatus status);
 }

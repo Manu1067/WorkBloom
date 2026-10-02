@@ -59,7 +59,10 @@ public class CommunityController {
     @PutMapping("/posts/{postId}")
     public ResponseEntity<PostResponse> updatePost(
             @PathVariable Long postId,
-            @RequestParam Long authorId,
+            // Deprecated/ignored as proof of identity: ownership is decided
+            // from the JWT. Kept optional so existing clients keep working;
+            // if supplied and it disagrees with the JWT identity -> 403.
+            @RequestParam(required = false) Long authorId,
             @RequestBody PostRequest request) {
 
         return ResponseEntity.ok(

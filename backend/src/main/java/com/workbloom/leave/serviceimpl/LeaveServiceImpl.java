@@ -14,6 +14,10 @@ import com.workbloom.leave.entity.Leave;
 import com.workbloom.leave.entity.LeaveStatus;
 import com.workbloom.leave.repository.LeaveRepository;
 import com.workbloom.leave.service.LeaveService;
+import com.workbloom.exception.BadRequestException;
+import com.workbloom.exception.ConflictException;
+import com.workbloom.exception.ForbiddenException;
+import com.workbloom.exception.ResourceNotFoundException;
 
 @Service
 public class LeaveServiceImpl implements LeaveService {
@@ -42,7 +46,7 @@ public class LeaveServiceImpl implements LeaveService {
         Employee employee =
                 employeeRepository.findById(employeeId)
                         .orElseThrow(
-                                () -> new RuntimeException(
+                                () -> new ResourceNotFoundException(
                                         "Employee not found"
                                 )
                         );
@@ -51,7 +55,7 @@ public class LeaveServiceImpl implements LeaveService {
         if (request.getStartDate() == null
                 || request.getEndDate() == null) {
 
-            throw new RuntimeException(
+            throw new BadRequestException(
                     "Start date and end date are required"
             );
         }
@@ -59,7 +63,7 @@ public class LeaveServiceImpl implements LeaveService {
         if (request.getEndDate()
                 .isBefore(request.getStartDate())) {
 
-            throw new RuntimeException(
+            throw new BadRequestException(
                     "End date cannot be before start date"
             );
         }
@@ -118,7 +122,7 @@ public class LeaveServiceImpl implements LeaveService {
         Employee employee =
                 employeeRepository.findById(employeeId)
                         .orElseThrow(
-                                () -> new RuntimeException(
+                                () -> new ResourceNotFoundException(
                                         "Employee not found"
                                 )
                         );
@@ -155,7 +159,7 @@ public class LeaveServiceImpl implements LeaveService {
         Leave leave =
                 leaveRepository.findById(leaveId)
                         .orElseThrow(
-                                () -> new RuntimeException(
+                                () -> new ResourceNotFoundException(
                                         "Leave request not found"
                                 )
                         );
@@ -174,7 +178,7 @@ public class LeaveServiceImpl implements LeaveService {
         Leave leave =
                 leaveRepository.findById(leaveId)
                         .orElseThrow(
-                                () -> new RuntimeException(
+                                () -> new ResourceNotFoundException(
                                         "Leave request not found"
                                 )
                         );
@@ -182,7 +186,7 @@ public class LeaveServiceImpl implements LeaveService {
         if (leave.getStatus()
                 != LeaveStatus.PENDING) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Only pending leave requests can be approved"
             );
         }
@@ -209,7 +213,7 @@ public class LeaveServiceImpl implements LeaveService {
         Leave leave =
                 leaveRepository.findById(leaveId)
                         .orElseThrow(
-                                () -> new RuntimeException(
+                                () -> new ResourceNotFoundException(
                                         "Leave request not found"
                                 )
                         );
@@ -217,7 +221,7 @@ public class LeaveServiceImpl implements LeaveService {
         if (leave.getStatus()
                 != LeaveStatus.PENDING) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Only pending leave requests can be rejected"
             );
         }
@@ -227,7 +231,7 @@ public class LeaveServiceImpl implements LeaveService {
                         .trim()
                         .isEmpty()) {
 
-            throw new RuntimeException(
+            throw new BadRequestException(
                     "Rejection reason is required"
             );
         }
@@ -258,7 +262,7 @@ public class LeaveServiceImpl implements LeaveService {
         Leave leave =
                 leaveRepository.findById(leaveId)
                         .orElseThrow(
-                                () -> new RuntimeException(
+                                () -> new ResourceNotFoundException(
                                         "Leave request not found"
                                 )
                         );
@@ -268,7 +272,7 @@ public class LeaveServiceImpl implements LeaveService {
                 .getId()
                 .equals(employeeId)) {
 
-            throw new RuntimeException(
+            throw new ForbiddenException(
                     "You cannot cancel another employee's leave"
             );
         }
@@ -276,7 +280,7 @@ public class LeaveServiceImpl implements LeaveService {
         if (leave.getStatus()
                 != LeaveStatus.PENDING) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Only pending leave requests can be cancelled"
             );
         }

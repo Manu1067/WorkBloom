@@ -16,4 +16,7 @@ public interface CommunityPostRepository
     List<CommunityPost> findByAuthor_IdAndDeletedFalseOrderByCreatedAtDesc(
             Long authorId
     );
+
+    // Added for Analytics (Task 4) - simple aggregate count, no new logic.
+    long countByDeletedFalse();
 }

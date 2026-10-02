@@ -3,31 +3,17 @@ package com.workbloom.ai.dto;
 public class AiWellnessRequest {
 
     private Long employeeId;
-
     private Integer overwhelmLevel;
-
     private Integer concentrationDifficulty;
-
     private Integer energyLevel;
-
     private Integer motivationLevel;
-
     private Integer sleepQuality;
-
     private Integer relaxationLevel;
-
     private String note;
-
     private String mood;
+
     public AiWellnessRequest() {
     }
-    public String getMood() {
-    return mood;
-}
-
-public void setMood(String mood) {
-    this.mood = mood;
-}
 
     public Long getEmployeeId() {
         return employeeId;
@@ -91,5 +77,13 @@ public void setMood(String mood) {
 
     public void setNote(String note) {
         this.note = note;
+    }
+
+    public String getMood() {
+        return mood;
+    }
+
+    public void setMood(String mood) {
+        this.mood = mood;
     }
 }

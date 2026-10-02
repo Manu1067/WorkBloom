@@ -23,4 +23,7 @@ public interface LeaveRepository extends JpaRepository<Leave, Long> {
             Employee employee,
             LeaveStatus status
     );
+
+    // Added for Analytics (Task 4) - simple aggregate count, no new logic.
+    long countByStatus(LeaveStatus status);
 }

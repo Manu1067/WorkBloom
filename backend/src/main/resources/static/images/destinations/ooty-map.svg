@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+  <rect width="400" height="300" fill="#E7ECEF"/>
+  <circle cx="200" cy="150" r="10" fill="#4E8F5C" stroke="#222" stroke-width="2"/>
+  <text x="20" y="280" font-family="Arial, sans-serif" font-size="14" fill="#333">Ooty (11.4064, 76.6932)</text>
+</svg>

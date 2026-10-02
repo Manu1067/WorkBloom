@@ -19,6 +19,10 @@ import com.workbloom.club.repository.ClubRepository;
 import com.workbloom.club.service.ClubService;
 import com.workbloom.employee.entity.Employee;
 import com.workbloom.employee.repository.EmployeeRepository;
+import com.workbloom.exception.BadRequestException;
+import com.workbloom.exception.ConflictException;
+import com.workbloom.exception.ForbiddenException;
+import com.workbloom.exception.ResourceNotFoundException;
 
 @Service
 @Transactional
@@ -88,7 +92,7 @@ public class ClubServiceImpl implements ClubService {
         verifyCreator(club, creatorId);
 
         if (club.getStatus() == ClubStatus.ARCHIVED) {
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Archived clubs cannot be updated");
         }
 
@@ -117,7 +121,7 @@ public class ClubServiceImpl implements ClubService {
         Employee employee = findEmployee(employeeId);
 
         if (club.getStatus() != ClubStatus.ACTIVE) {
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Archived clubs cannot accept members");
         }
 
@@ -130,7 +134,7 @@ public class ClubServiceImpl implements ClubService {
                         .orElseGet(ClubMembership::new);
 
         if (membership.getStatus() == ClubMembershipStatus.ACTIVE) {
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Employee is already a club member");
         }
 
@@ -159,11 +163,11 @@ public class ClubServiceImpl implements ClubService {
                                 employeeId
                         )
                         .orElseThrow(() ->
-                                new RuntimeException(
+                                new ResourceNotFoundException(
                                         "Club membership not found"));
 
         if (membership.getStatus() != ClubMembershipStatus.ACTIVE) {
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Employee is not an active club member");
         }
 
@@ -204,16 +208,16 @@ public class ClubServiceImpl implements ClubService {
                                 employeeId
                         )
                         .orElseThrow(() ->
-                                new RuntimeException(
+                                new ResourceNotFoundException(
                                         "Club membership not found"));
 
         if (membership.getStatus() != ClubMembershipStatus.ACTIVE) {
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Employee is not an active club member");
         }
 
         if (membership.getRole() == ClubMemberRole.ADMIN) {
-            throw new RuntimeException(
+            throw new ForbiddenException(
                     "Club administrators cannot be removed");
         }
 
@@ -239,13 +243,13 @@ public class ClubServiceImpl implements ClubService {
     private Club findClub(Long clubId) {
         return clubRepository.findById(clubId)
                 .orElseThrow(() ->
-                        new RuntimeException("Club not found"));
+                        new ResourceNotFoundException("Club not found"));
     }
 
     private Employee findEmployee(Long employeeId) {
         return employeeRepository.findById(employeeId)
                 .orElseThrow(() ->
-                        new RuntimeException("Employee not found"));
+                        new ResourceNotFoundException("Employee not found"));
     }
 
     private ClubResponse toResponse(Club club) {
@@ -263,7 +267,7 @@ public class ClubServiceImpl implements ClubService {
             Long creatorId) {
 
         if (!club.getCreator().getId().equals(creatorId)) {
-            throw new RuntimeException(
+            throw new ForbiddenException(
                     "Only the club creator can manage this club");
         }
     }
@@ -271,7 +275,7 @@ public class ClubServiceImpl implements ClubService {
     private void validateRequest(ClubRequest request) {
         if (request == null || request.getName() == null
                 || request.getName().isBlank()) {
-            throw new RuntimeException("Club name is required");
+            throw new BadRequestException("Club name is required");
         }
     }
 

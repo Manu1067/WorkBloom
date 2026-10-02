@@ -16,6 +16,10 @@ import com.workbloom.buddy.repository.BuddyRequestRepository;
 import com.workbloom.buddy.service.BuddyService;
 import com.workbloom.employee.entity.Employee;
 import com.workbloom.employee.repository.EmployeeRepository;
+import com.workbloom.exception.BadRequestException;
+import com.workbloom.exception.ConflictException;
+import com.workbloom.exception.ForbiddenException;
+import com.workbloom.exception.ResourceNotFoundException;
 
 @Service
 @Transactional
@@ -47,31 +51,31 @@ public class BuddyServiceImpl implements BuddyService {
         Employee requester = employeeRepository
                 .findById(requesterId)
                 .orElseThrow(() ->
-                        new RuntimeException("Requester not found"));
+                        new ResourceNotFoundException("Requester not found"));
 
         Employee receiver = employeeRepository
                 .findById(request.getReceiverId())
                 .orElseThrow(() ->
-                        new RuntimeException("Receiver not found"));
+                        new ResourceNotFoundException("Receiver not found"));
 
         // Employee cannot send request to themselves
         if (requesterId.equals(receiver.getId())) {
 
-            throw new RuntimeException(
+            throw new BadRequestException(
                     "You cannot send a buddy request to yourself");
         }
 
         // Requester must not already have a buddy
         if (hasActiveBuddy(requesterId)) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Requester already has an active buddy");
         }
 
         // Receiver must not already have a buddy
         if (hasActiveBuddy(receiver.getId())) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Receiver already has an active buddy");
         }
 
@@ -82,7 +86,7 @@ public class BuddyServiceImpl implements BuddyService {
                         receiver.getId(),
                         BuddyRequestStatus.PENDING)) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Buddy request already exists");
         }
 
@@ -151,7 +155,7 @@ public class BuddyServiceImpl implements BuddyService {
                 buddyRequestRepository
                         .findById(requestId)
                         .orElseThrow(() ->
-                                new RuntimeException(
+                                new ResourceNotFoundException(
                                         "Buddy request not found"));
 
         // Only receiver can accept
@@ -159,7 +163,7 @@ public class BuddyServiceImpl implements BuddyService {
                 .getId()
                 .equals(employeeId)) {
 
-            throw new RuntimeException(
+            throw new ForbiddenException(
                     "Only the receiver can accept this request");
         }
 
@@ -167,7 +171,7 @@ public class BuddyServiceImpl implements BuddyService {
         if (request.getStatus()
                 != BuddyRequestStatus.PENDING) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Buddy request is no longer pending");
         }
 
@@ -180,14 +184,14 @@ public class BuddyServiceImpl implements BuddyService {
         // Receiver already has buddy
         if (hasActiveBuddy(receiver.getId())) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Receiver already has an active buddy");
         }
 
         // Requester already has buddy
         if (hasActiveBuddy(requester.getId())) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Requester already has an active buddy");
         }
 
@@ -228,7 +232,7 @@ public class BuddyServiceImpl implements BuddyService {
                 buddyRequestRepository
                         .findById(requestId)
                         .orElseThrow(() ->
-                                new RuntimeException(
+                                new ResourceNotFoundException(
                                         "Buddy request not found"));
 
         // Only receiver can reject
@@ -236,7 +240,7 @@ public class BuddyServiceImpl implements BuddyService {
                 .getId()
                 .equals(employeeId)) {
 
-            throw new RuntimeException(
+            throw new ForbiddenException(
                     "Only the receiver can reject this request");
         }
 
@@ -244,7 +248,7 @@ public class BuddyServiceImpl implements BuddyService {
         if (request.getStatus()
                 != BuddyRequestStatus.PENDING) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Buddy request is no longer pending");
         }
 
@@ -282,7 +286,7 @@ public class BuddyServiceImpl implements BuddyService {
                                                 employeeId
                                         )
                                         .orElseThrow(() ->
-                                                new RuntimeException(
+                                                new ResourceNotFoundException(
                                                         "No active buddy found")));
 
         Employee buddy;

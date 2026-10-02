@@ -5,6 +5,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.workbloom.employee.entity.Employee;
 import com.workbloom.employee.repository.EmployeeRepository;
+import com.workbloom.exception.ResourceNotFoundException;
 import com.workbloom.travel.dto.TravelPreferenceRequest;
 import com.workbloom.travel.dto.TravelPreferenceResponse;
 import com.workbloom.travel.entity.TravelPreference;
@@ -34,7 +35,7 @@ public class TravelPreferenceServiceImpl
 
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() ->
-                        new RuntimeException("Employee not found"));
+                        new ResourceNotFoundException("Employee not found"));
 
         TravelPreference preference =
                 travelPreferenceRepository
@@ -60,7 +61,7 @@ public class TravelPreferenceServiceImpl
                 travelPreferenceRepository
                         .findByEmployee_Id(employeeId)
                         .orElseThrow(() ->
-                                new RuntimeException(
+                                new ResourceNotFoundException(
                                         "Travel preferences not found"));
 
         return TravelPreferenceResponse.fromEntity(preference);

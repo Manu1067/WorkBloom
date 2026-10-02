@@ -1,1026 +1,1635 @@
-import { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
-import { features } from '../api'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
+
+import { travelApi } from '../api/travelApi'
+
+import { getEmployeeId } from '../api/apiClient'
+
 import { useToast } from '../components/ToastContext'
-import { RouteMap } from '../components/RouteMap'
 
-const INDIAN_ORIGIN_CITIES = [
-  'Bengaluru, Karnataka',
-  'Mumbai, Maharashtra',
-  'New Delhi, Delhi',
-  'Chennai, Tamil Nadu',
-  'Hyderabad, Telangana',
-  'Pune, Maharashtra',
-  'Kochi, Kerala',
-  'Kolkata, West Bengal',
-  'Goa',
-  'Jaipur, Rajasthan',
-  'Chandigarh',
-  'Coimbatore, Tamil Nadu',
-]
+import { TravelMap } from '../components/travel/TravelMap'
 
-const MOODS = [
-  {
-    id: 'Tired',
-    label: 'Tired / Depleted',
-    emoji: '🌿',
-    summary: 'Nervous system exhaustion & physical fatigue',
-    need: 'Deep quiet, mineral soaks, cedar forests & zero alarms',
-    color: 'hsl(var(--sage))',
-  },
-  {
-    id: 'Full',
-    label: 'Full / Overstimulated',
-    emoji: '🧘',
-    summary: 'Cognitive overload & notification fatigue',
-    need: 'Digital detox, sound silence & high mountain clarity',
-    color: 'hsl(var(--coral))',
-  },
-  {
-    id: 'Steady',
-    label: 'Steady / Grounded',
-    emoji: '⚖️',
-    summary: 'Stable focus & gentle creative rhythm',
-    need: 'Ocean horizons, reflective essays & nature walks',
-    color: 'hsl(var(--sky))',
-  },
-  {
-    id: 'Bright',
-    label: 'Bright / Energized',
-    emoji: '☀️',
-    summary: 'High vitality & uplifted curiosity',
-    need: 'Volcanic thermal pools, vibrant botanical trails & wonder',
-    color: 'hsl(var(--gold))',
-  },
-]
+import { getDestinationImage } from '../utils/destinationImages'
 
-const DEPLETION_FACTORS = [
-  { id: 'screen', label: 'Screen strain & nonstop notifications', icon: '💻', desc: 'Eyes tired, visual overstimulation, inbox anxiety' },
-  { id: 'meetings', label: 'Meeting fatigue & social context-switching', icon: '🗣️', desc: 'Too many calls, speaking exhaustion, empathy drain' },
-  { id: 'physical', label: 'Physical stiffness & interrupted sleep', icon: '🛏️', desc: 'Desk posture tension, shallow breathing, waking unrefreshed' },
-  { id: 'creative', label: 'Creative stagnation & repetitive routine', icon: '🎨', desc: 'Need fresh perspective, expansive landscapes, new ideas' },
-]
 
-const SENSORY_PREFERENCES = [
-  { id: 'tea', label: 'Misty emerald tea slopes & Ayurvedic herbal therapies (Munnar, Kerala)', icon: '🍃', havenId: 1 },
-  { id: 'river', label: 'Sacred Ganges riverbank, acoustic singing bowls & stillness (Rishikesh, Uttarakhand)', icon: '🌊', havenId: 2 },
-  { id: 'coffee', label: 'Rainforest canopy, organic coffee estate & deep sleep reset (Coorg, Karnataka)', icon: '☕', havenId: 3 },
-  { id: 'desert', label: 'High mountain desert silence, Bortle-1 stargazing & zero cell signal (Nubra Valley, Ladakh)', icon: '🌌', havenId: 4 },
-  { id: 'cliff', label: 'Red laterite sea cliffs, ocean surf & natural mineral springs (Varkala, Kerala)', icon: '🏖️', havenId: 5 },
-  { id: 'cedar', label: 'Towering deodar cedar woods & Dhauladhar snowpeaks (Dharamshala, Himachal Pradesh)', icon: '🌲', havenId: 6 },
-  { id: 'beach', label: 'Secluded crescent cove, warm sand grounding & quiet tide (Gokarna, Karnataka)', icon: '🏝️', havenId: 7 },
-  { id: 'banyan', label: 'Ancient sacred banyan tree & conscious regenerative eco-forest (Auroville, Tamil Nadu)', icon: '🌳', havenId: 8 },
-]
-
-const RECHARGE_GOALS = [
-  { id: 'detox', label: 'Total digital detox (zero Wi-Fi, zero screens)', icon: '📴' },
-  { id: 'somatic', label: 'Deep somatic body reset & 9+ hours uninterrupted sleep', icon: '😴' },
-  { id: 'reflection', label: 'Quiet journaling, mindful essays & creative contemplation', icon: '📖' },
-  { id: 'wander', label: 'Gentle slow exploration, organic food & mountain trails', icon: '🎒' },
-]
 
 export function TravelView({ user, navigate }) {
-  const [destinations, setDestinations] = useState([])
-  const [selectedMood, setSelectedMood] = useState(user?.latestMood || 'Steady')
-  const [moodFilterOnly, setMoodFilterOnly] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [origin, setOrigin] = useState('Bengaluru, Karnataka')
-  const [dest, setDest] = useState('Munnar Tea Sanctuary, India')
-  const [pacingMode, setPacingMode] = useState('Scenic & Slow Pacing')
-  const [routePlan, setRoutePlan] = useState(null)
-  const [planning, setPlanning] = useState(false)
 
-  // Questionnaire state for AI n8n + Ollama
-  const [activeTab, setActiveTab] = useState('ai-questionnaire') // 'ai-questionnaire' | 'browse'
-  const [qMood, setQMood] = useState(user?.latestMood || 'Tired')
-  const [qEnergy, setQEnergy] = useState(user?.latestEnergyLevel || 4)
-  const [qDepletion, setQDepletion] = useState('screen')
-  const [qSensory, setQSensory] = useState('tea')
-  const [qGoal, setQGoal] = useState('somatic')
-  const [aiLoading, setAiLoading] = useState(false)
-  const [aiResult, setAiResult] = useState(null)
+  // getEmployeeId() holds the REAL Employee id resolved via GET /employees/me
 
-  const addToast = useToast()
+  // (see AuthContext); user.id can be the auth User id, a different entity.
 
-  const loadTravelData = async (mood) => {
-    try {
-      setLoading(true)
-      const data = await features.destinations(mood)
-      setDestinations(data)
-      setError(null)
-    } catch (err) {
-      setError(err.message || 'Could not load destinations')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const empId = getEmployeeId() || user?.employeeId || user?.id
 
-  useEffect(() => {
-    loadTravelData(selectedMood)
-  }, [selectedMood])
 
-  const handleMoodSelect = (moodId) => {
-    setSelectedMood(moodId)
-    setQMood(moodId)
-    addToast(`Filtering restorative havens for mood: "${moodId}" 🌸`)
-  }
 
-  const handleRunAiAssessment = async (e) => {
-    if (e) e.preventDefault()
-    try {
-      setAiLoading(true)
-      const sensoryObj = SENSORY_PREFERENCES.find((s) => s.id === qSensory)
-      const depletionObj = DEPLETION_FACTORS.find((d) => d.id === qDepletion)
-      const goalObj = RECHARGE_GOALS.find((g) => g.id === qGoal)
+  // Sabbatical flow steps
 
-      const payload = {
-        employeeId: user?.id,
-        mood: qMood,
-        energy: qEnergy,
-        sensoryPreference: sensoryObj ? sensoryObj.label : 'Silent cedar forest & natural soaks',
-        burnoutSource: depletionObj ? depletionObj.label : 'Screen and notification fatigue',
-        rechargeGoal: goalObj ? goalObj.label : 'Deep nervous system reset & uninterrupted sleep',
-      }
+  const [questions, setQuestions] = useState([])
 
-      const res = await features.travelAiRecommend(payload)
-      setAiResult(res)
-      if (res.destination) {
-        setDest(`${res.destination.name}, ${res.destination.country}`)
-      }
-      addToast(`AI matched the most appropriate destination: "${res.destination?.name}" ✨`)
-    } catch (err) {
-      addToast(err.message || 'AI assessment failed', 'error')
-    } finally {
-      setAiLoading(false)
-    }
-  }
+  const [selectedOptionIds, setSelectedOptionIds] = useState({})
 
-  const handleOptimizeRoute = async (e, customOrigin, customDest) => {
-    if (e) e.preventDefault()
-    const targetOrigin = customOrigin || origin
-    const targetDest = customDest || dest
-    try {
-      setPlanning(true)
-      const res = await features.optimizeRoute({ origin: targetOrigin, destination: targetDest, pacingMode })
-      setRoutePlan(res)
-      if (e) addToast('Restorative route calculated and visualized on map! 🗺️')
-    } catch (err) {
-      if (e) addToast(err.message, 'error')
-    } finally {
-      setPlanning(false)
-    }
-  }
+  const [recommendations, setRecommendations] = useState([])
 
-  // Calculate initial route on mount so map is live and visual right away
-  useEffect(() => {
-    handleOptimizeRoute(null, origin, dest)
-  }, [])
+  const [singleRecommendation, setSingleRecommendation] = useState(null)
 
-  const selectHavenForRoute = (destinationFullName) => {
-    setDest(destinationFullName)
-    handleOptimizeRoute(null, origin, destinationFullName)
-    addToast(`Selected "${destinationFullName}"! Route updated on map. 🗺️`)
-    const el = document.getElementById('route-optimizer-box')
-    if (el) el.scrollIntoView({ behavior: 'smooth' })
-  }
 
-  const topMatch = destinations[0]
-  const displayedDestinations = moodFilterOnly
-    ? destinations.filter((d) => d.isRecommended || d.matchScore >= 90)
-    : destinations
 
-  const currentMoodObj = MOODS.find((m) => m.id === selectedMood) || MOODS[0]
+  // Destination catalog & detail
 
-  return (
-    <div className="content page-shell">
-      {/* Header */}
-      <div className="module-hero" style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <p className="eyebrow" style={{ color: 'hsl(var(--sage))', margin: 0 }}>Room to roam · Intentional sabbatical</p>
-          <span className="badge-pill badge-calm" style={{ fontSize: 10 }}>
-            🤖 Powered by n8n + Ollama AI
-          </span>
-        </div>
-        <h1>Mood-Based Travel & Restorative Havens</h1>
-        <p className="subtitle" style={{ maxWidth: 680 }}>
-          WorkBloom pairs intentional sabbatical travel with nervous-system health. Answer a few brief diagnostic questions to let our <strong>n8n + Ollama AI pipeline</strong> prescribe the most biologically restorative sanctuary for your exact burnout factors.
-        </p>
+  const [allDestinations, setAllDestinations] = useState([])
 
-        {/* View Mode Switcher */}
-        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-          <button
-            type="button"
-            className={`button ${activeTab === 'ai-questionnaire' ? 'button-primary' : 'button-quiet'}`}
-            onClick={() => setActiveTab('ai-questionnaire')}
-          >
-            ✨ AI Assessment (n8n + Ollama)
-          </button>
-          <button
-            type="button"
-            className={`button ${activeTab === 'browse' ? 'button-primary' : 'button-quiet'}`}
-            onClick={() => setActiveTab('browse')}
-          >
-            🧭 Browse All Sanctuaries & Moods ({destinations.length})
-          </button>
-        </div>
-      </div>
+  const [selectedCategory, setSelectedCategory] = useState('')
 
-      {/* ========================================================================= */}
-      {/* TAB 1: AI QUESTIONNAIRE & APPROPRIATE DESTINATION (n8n + Ollama) */}
-      {/* ========================================================================= */}
-      {activeTab === 'ai-questionnaire' && (
-        <section
-          className="card card-pad"
+  const [activeDestination, setActiveDestination] = useState(null)
+
+  const [destinationImages, setDestinationImages] = useState([])
+
+  const [detailModal, setDetailModal] = useState(false)
+
+
+
+  // Route optimization state
+
+  const [selectedRouteDestIds, setSelectedRouteDestIds] = useState([])
+
+  const [routePlan, setRoutePlan] = useState(null)
+
+  const [routeLoading, setRouteLoading] = useState(false)
+
+
+
+  // UI state
+
+  const [loading, setLoading] = useState(true)
+
+  const [submittingAnswers, setSubmittingAnswers] = useState(false)
+
+  const [error, setError] = useState(null)
+
+  // Distinguishes "backend returned zero questions" (DB genuinely not
+
+  // seeded - a real, valid state, not a bug) from "the questions
+
+  // request itself failed" (auth/network/contract error) - these were
+
+  // previously indistinguishable because .catch(() => []) silently
+
+  // turned any failure into the same empty array as a truly empty table.
+
+  const [questionsError, setQuestionsError] = useState(null)
+
+  const [step, setStep] = useState(0)
+
+  const [catalogError, setCatalogError] = useState(null)
+
+  const [fullCatalog, setFullCatalog] = useState([])
+
+  const [mapFocusId, setMapFocusId] = useState(null)
+
+  const [detailError, setDetailError] = useState(null)
+
+
+
+  const addToast = useToast()
+
+
+
+  const logDev = (label, err) => {
+
+    if (import.meta.env.DEV) console.warn(`[Travel] ${label}`, err)
+
+  }
+
+
+
+  // Initial data load: Questions, Catalog, Personal Recommendation
+
+  const loadInitialTravelData = async ({ silent = false } = {}) => {
+
+    try {
+
+      // After the first load, refreshes (e.g. the employee id resolving late)
+
+      // must not swap the whole page for a skeleton: that unmounted the cards,
+
+      // the map and any open details panel.
+
+      if (!silent) setLoading(true)
+
+      setError(null)
+
+      setQuestionsError(null)
+
+      setCatalogError(null)
+
+
+
+      const [qData, dData, recData] = await Promise.all([
+
+        travelApi.getQuestions().catch((err) => {
+
+          logDev('GET /travel/questions failed', err)
+
+          setQuestionsError(
+
+            err?.status ? `${err.message} (HTTP ${err.status})` : err?.message || 'Failed to load questionnaire from the backend',
+
+          )
+
+          return []
+
+        }),
+
+        travelApi.listDestinations().catch((err) => {
+
+          logDev('GET /travel/destinations failed', err)
+
+          setCatalogError(err?.message || 'Failed to load destinations')
+
+          return []
+
+        }),
+
+        empId
+
+          ? travelApi.getRecommendation(empId).catch((err) => {
+
+              // 404 is normal when the employee has no mood/wellness data yet.
+
+              logDev('GET /travel/recommend failed', err)
+
+              return null
+
+            })
+
+          : null,
+
+      ])
+
+
+
+      const questionList = Array.isArray(qData) ? [...qData].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)) : []
+
+      setQuestions(questionList)
+
+      setStep(0)
+
+      setAllDestinations(Array.isArray(dData) ? dData : [])
+
+      setFullCatalog(Array.isArray(dData) ? dData : [])
+
+      setSingleRecommendation(recData)
+
+    } catch (err) {
+
+      setError(err.message || 'Could not load travel data from the Spring Boot backend')
+
+    } finally {
+
+      setLoading(false)
+
+    }
+
+  }
+
+
+
+  const hasLoadedOnce = useRef(false)
+
+  useEffect(() => {
+
+    loadInitialTravelData({ silent: hasLoadedOnce.current }).finally(() => {
+
+      hasLoadedOnce.current = true
+
+    })
+
+  }, [empId])
+
+
+
+  // Escape closes the details panel (and the backdrop never traps the page)
+
+  useEffect(() => {
+
+    if (!detailModal) return undefined
+
+    const onKey = (e) => { if (e.key === 'Escape') setDetailModal(false) }
+
+    window.addEventListener('keydown', onKey)
+
+    return () => window.removeEventListener('keydown', onKey)
+
+  }, [detailModal])
+
+
+
+  // Filter destination catalog by category
+
+  const handleCategoryFilter = async (cat) => {
+
+    try {
+
+      setSelectedCategory(cat)
+
+      const data = await travelApi.listDestinations(cat || null)
+
+      setAllDestinations(Array.isArray(data) ? data : [])
+
+    } catch (err) {
+
+      addToast(err.message || 'Filter failed', 'error')
+
+    }
+
+  }
+
+
+
+  // Handle questionnaire option selection
+
+  const handleOptionSelect = (questionId, optionId) => {
+
+    setSelectedOptionIds((prev) => ({
+
+      ...prev,
+
+      [questionId]: optionId,
+
+    }))
+
+  }
+
+
+
+  // Submit Questionnaire answers -> POST /api/travel/recommendations
+
+  const handleSubmitQuestionnaire = async (e) => {
+
+    e.preventDefault()
+
+    const optionIdList = Object.values(selectedOptionIds)
+
+
+
+    if (optionIdList.length === 0) {
+
+      addToast('Please select at least one question option to get recommendations.', 'error')
+
+      return
+
+    }
+
+
+
+    try {
+
+      setSubmittingAnswers(true)
+
+      const res = await travelApi.getRecommendationsFromAnswers(empId, optionIdList)
+
+      setRecommendations(Array.isArray(res) ? res : [])
+
+      addToast('Personalized sabbatical havens recommended! ✨')
+
+
+
+      const el = document.getElementById('recommendations-section')
+
+      if (el) el.scrollIntoView({ behavior: 'smooth' })
+
+    } catch (err) {
+
+      addToast(err.message || 'Could not fetch travel recommendations', 'error')
+
+    } finally {
+
+      setSubmittingAnswers(false)
+
+    }
+
+  }
+
+
+
+  // Open Destination Details modal -> GET /api/travel/destinations/{id} & images
+
+  const handleOpenDestinationDetail = async (destId) => {
+
+    try {
+
+      setDetailModal(true)
+
+      setActiveDestination(null)
+
+      setDestinationImages([])
+
+      setDetailError(null)
+
+
+
+      const [destDetail, imgs] = await Promise.all([
+
+        travelApi.getDestination(destId),
+
+        travelApi.getDestinationImages(destId).catch((err) => {
+
+          logDev('GET destination images failed', err)
+
+          return []
+
+        }),
+
+      ])
+
+
+
+      setActiveDestination(destDetail)
+
+      setDestinationImages(Array.isArray(imgs) ? imgs : [])
+
+    } catch (err) {
+
+      setDetailError(err.message || 'Could not load destination details')
+
+      addToast(err.message || 'Could not load destination details', 'error')
+
+    }
+
+  }
+
+
+
+  // Focus the interactive map on a destination ("View on Map")
+
+  const handleViewOnMap = (dest) => {
+
+    if (!dest) return
+
+    setSelectedRouteDestIds((prev) => (prev.includes(dest.id) ? prev : [...prev, dest.id]))
+
+    setRoutePlan(null)
+
+    setMapFocusId(dest.id)
+
+    setDetailModal(false)
+
+    setTimeout(() => {
+
+      const el = document.getElementById('travel-map-section')
+
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
+    }, 50)
+
+  }
+
+
+
+  // Toggle destination for Route Optimization
+
+  const handleToggleRouteDestination = (destId) => {
+
+    setRoutePlan(null) // a previously optimized route no longer matches the selection
+
+    setSelectedRouteDestIds((prev) => {
+
+      if (prev.includes(destId)) {
+
+        return prev.filter((id) => id !== destId)
+
+      } else {
+
+        return [...prev, destId]
+
+      }
+
+    })
+
+  }
+
+
+
+  // Optimize Multi-Destination Route -> POST /api/travel/routes/optimize
+
+  // (backend: nearest-neighbour ordering over Haversine distance)
+
+  const handleOptimizeRoute = async () => {
+
+    if (selectedRouteDestIds.length < 2) {
+
+      addToast('Select at least two destinations to optimize a route.', 'error')
+
+      return
+
+    }
+
+
+
+    try {
+
+      setRouteLoading(true)
+
+      const res = await travelApi.optimizeRoute(selectedRouteDestIds)
+
+      const points = Array.isArray(res?.points) ? res.points : []
+
+      if (points.length === 0) {
+
+        throw new Error('The route optimizer returned no stops.')
+
+      }
+
+      setRoutePlan({ points, totalDistanceKm: res.totalDistanceKm })
+
+      setMapFocusId(null)
+
+      addToast(`Destination order optimized across ${points.length} stops.`)
+
+    } catch (err) {
+
+      setRoutePlan(null)
+
+      addToast(err.message || 'Route optimization failed', 'error')
+
+    } finally {
+
+      setRouteLoading(false)
+
+    }
+
+  }
+
+
+
+  const catalogById = (id) => fullCatalog.find((d) => d.id === id) || null
+
+
+
+  // Destinations plotted on the map: the user's selection, resolved to the
+
+  // catalog rows (real backend coordinates). Optimized route, when present, wins.
+
+  const mapDestinations = selectedRouteDestIds.map((id) => catalogById(id)).filter(Boolean)
+
+  const currentQuestion = questions[step]
+
+  const answeredCount = questions.filter((q) => selectedOptionIds[q.id] !== undefined).length
+
+
+
+  if (loading) {
+
+    return (
+
+      <div className="content page-shell">
+
+        <p style={{ fontSize: 13, color: 'hsl(var(--muted))', marginBottom: 12 }}>Loading your travel questions...</p>
+
+        <div style={{ display: 'grid', gap: 20 }}>
+
+          <div className="skeleton" style={{ height: 240, borderRadius: 16 }} />
+
+          <div className="skeleton" style={{ height: 320, borderRadius: 16 }} />
+
+        </div>
+
+      </div>
+
+    )
+
+  }
+
+
+
+  if (error) {
+
+    return (
+
+      <div className="content page-shell">
+
+        <div className="alert" style={{ background: 'hsl(var(--coral-soft) / 0.4)', padding: 18, borderRadius: 12 }}>
+
+          <strong>Travel Connection Issue</strong>
+
+          <p style={{ margin: '4px 0 12px', fontSize: 13 }}>{error}</p>
+
+          <button className="button button-quiet" onClick={loadInitialTravelData}>Retry</button>
+
+        </div>
+
+      </div>
+
+    )
+
+  }
+
+
+
+  return (
+
+    <div className="content page-shell">
+
+      {/* Exploratory Hero Header */}
+
+      <div
+
+        className="module-hero"
+
+        style={{
+
+          marginBottom: 28,
+
+          background: 'linear-gradient(135deg, hsl(var(--paper)), hsl(var(--sky-soft) / 0.3))',
+
+          padding: 28,
+
+          borderRadius: 16,
+
+          border: '1px solid hsl(var(--line))',
+
+        }}
+
+      >
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+
+          <p className="eyebrow" style={{ color: 'hsl(var(--sage-dark))', fontWeight: 600 }}>Signature Feature · Sabbatical & Rest</p>
+
+          <span className="badge-pill badge-calm" style={{ fontSize: 10 }}>Powered by Spring Boot Travel Engine</span>
+
+        </div>
+
+        <h1 style={{ fontSize: 32, marginBottom: 8 }}>Restorative Travel & Sabbaticals</h1>
+
+        <p className="subtitle" style={{ maxWidth: 680, color: 'hsl(var(--ink) / 0.85)', lineHeight: 1.6 }}>
+
+          Discover biologically restorative sanctuaries tailored to your nervous-system state. Complete the questionnaire to receive ranked recommendations and optimize multi-destination itineraries.
+
+        </p>
+
+      </div>
+
+
+
+      {/* Single Personal Recommendation Spotlight if available */}
+
+      {singleRecommendation && (
+
+        <div
+
+          className="card card-pad"
+
+          style={{
+
+            marginBottom: 28,
+
+            border: '1.5px solid hsl(var(--sage-dark))',
+
+            background: 'hsl(var(--paper-warm))',
+
+            padding: 22,
+
+            borderRadius: 16,
+
+          }}
+
+        >
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+
+            <span className="badge-pill badge-calm" style={{ fontWeight: 700 }}>
+
+              🌟 Personal Haven Match (Latest Mood & Preferences)
+
+            </span>
+
+          </div>
+
+          {getDestinationImage(singleRecommendation.destination, singleRecommendation.imageUrl) && (
+
+            <img
+
+              src={getDestinationImage(singleRecommendation.destination, singleRecommendation.imageUrl)}
+
+              alt={singleRecommendation.destination}
+
+              loading="lazy"
+
+              style={{ width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: 10, marginBottom: 12 }}
+
+            />
+
+          )}
+
+          <h2 style={{ margin: '0 0 6px', fontSize: 22 }}>{singleRecommendation.destination}</h2>
+
+          <p style={{ margin: '0 0 10px', fontSize: 13, color: 'hsl(var(--ink))', lineHeight: 1.5 }}>
+
+            {singleRecommendation.description}
+
+          </p>
+
+          {singleRecommendation.reason && (
+
+            <div style={{ padding: '8px 12px', background: 'hsl(var(--paper))', borderRadius: 8, fontSize: 12, marginBottom: 12 }}>
+
+              <strong>Why it matches you:</strong> {singleRecommendation.reason}
+
+            </div>
+
+          )}
+
+          <button
+
+            type="button"
+
+            className="button button-primary"
+
+            style={{ fontSize: 11 }}
+
+            disabled={!singleRecommendation.destinationId}
+
+            onClick={() => handleOpenDestinationDetail(singleRecommendation.destinationId)}
+
+          >
+
+            View Details →
+
+          </button>
+
+        </div>
+
+      )}
+
+
+
+      {/* Questionnaire Section */}
+
+      <section className="card card-pad" style={{ marginBottom: 32, padding: 24 }}>
+
+        <h2 className="card-title" style={{ margin: '0 0 4px', fontSize: 20 }}>Travel Questionnaire</h2>
+
+        <p className="card-caption" style={{ margin: '0 0 20px', fontSize: 12, color: 'hsl(var(--muted))' }}>
+
+          Select your preferences to query the Spring Boot recommendation engine
+
+        </p>
+
+
+
+        {questionsError ? (
+
+          <div role="alert" style={{ padding: 16, borderRadius: 10, background: 'hsl(var(--coral-soft) / 0.4)', fontSize: 13 }}>
+
+            <strong>Could not load the travel questionnaire.</strong>
+
+            <p style={{ margin: '4px 0 10px' }}>{questionsError}</p>
+
+            <button type="button" className="button button-quiet" onClick={loadInitialTravelData}>Retry</button>
+
+          </div>
+
+        ) : questions.length === 0 ? (
+
+          <div role="alert" style={{ padding: 16, borderRadius: 10, background: 'hsl(var(--paper-warm))', fontSize: 13, lineHeight: 1.5 }}>
+
+            <strong>The questionnaire is empty in the database.</strong>
+
+            <p style={{ margin: '4px 0 10px' }}>
+
+              The backend answered successfully but returned no active rows from <code>travel_questions</code>.
+
+              Spring Boot seeds them from <code>database/seed/01_travel_questions.sql</code> on startup; if that was
+
+              disabled or failed, apply the file to the same PostgreSQL database the backend uses and reload.
+
+            </p>
+
+            <button type="button" className="button button-quiet" onClick={loadInitialTravelData}>Reload questions</button>
+
+          </div>
+
+        ) : (
+
+          <form onSubmit={handleSubmitQuestionnaire}>
+
+            {/* Progress */}
+
+            <div style={{ marginBottom: 16 }}>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'hsl(var(--muted))', marginBottom: 6 }}>
+
+                <span>Question {step + 1} of {questions.length}</span>
+
+                <span>{answeredCount} answered</span>
+
+              </div>
+
+              <div style={{ height: 6, borderRadius: 3, background: 'hsl(var(--line))', overflow: 'hidden' }}>
+
+                <div style={{ width: `${((step + 1) / questions.length) * 100}%`, height: '100%', background: 'hsl(var(--sage-dark))', transition: 'width .25s ease' }} />
+
+              </div>
+
+            </div>
+
+
+
+            {currentQuestion && (
+
+              <div key={currentQuestion.id} style={{ marginBottom: 22 }}>
+
+                <label style={{ display: 'block', fontSize: 15, fontWeight: 700, marginBottom: 12 }}>
+
+                  {currentQuestion.questionText}
+
+                </label>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+
+                  {(currentQuestion.options || []).map((opt) => {
+
+                    const isSelected = selectedOptionIds[currentQuestion.id] === opt.id
+
+                    return (
+
+                      <button
+
+                        key={opt.id}
+
+                        type="button"
+
+                        aria-pressed={isSelected}
+
+                        onClick={() => handleOptionSelect(currentQuestion.id, opt.id)}
+
+                        style={{
+
+                          textAlign: 'left',
+
+                          padding: '12px 14px',
+
+                          borderRadius: 10,
+
+                          border: isSelected ? '2px solid hsl(var(--sage-dark))' : '1px solid hsl(var(--line))',
+
+                          background: isSelected ? 'hsl(var(--sage-soft) / 0.5)' : 'hsl(var(--paper))',
+
+                          cursor: 'pointer',
+
+                        }}
+
+                      >
+
+                        <strong style={{ display: 'block', fontSize: 13, color: isSelected ? 'hsl(var(--sage-dark))' : 'hsl(var(--ink))' }}>
+
+                          {isSelected ? '✓ ' : ''}{opt.label}
+
+                        </strong>
+
+                      </button>
+
+                    )
+
+                  })}
+
+                  {(currentQuestion.options || []).length === 0 && (
+
+                    <span style={{ fontSize: 12, color: 'hsl(var(--muted))' }}>No answer options are configured for this question in the database.</span>
+
+                  )}
+
+                </div>
+
+              </div>
+
+            )}
+
+
+
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+
+              <button
+
+                type="button"
+
+                className="button button-quiet"
+
+                disabled={step === 0}
+
+                onClick={() => setStep((n) => Math.max(0, n - 1))}
+
+              >
+
+                ← Previous
+
+              </button>
+
+              {step < questions.length - 1 ? (
+
+                <button type="button" className="button button-primary" onClick={() => setStep((n) => Math.min(questions.length - 1, n + 1))}>
+
+                  Next →
+
+                </button>
+
+              ) : (
+
+                <button type="submit" className="button button-primary" disabled={submittingAnswers || answeredCount === 0} style={{ padding: '10px 22px' }}>
+
+                  {submittingAnswers ? 'Finding Matches...' : 'Find My Destinations'}
+
+                </button>
+
+              )}
+
+              {step < questions.length - 1 && answeredCount > 0 && (
+
+                <button type="submit" className="button button-quiet" disabled={submittingAnswers} style={{ marginLeft: 'auto', fontSize: 12 }}>
+
+                  {submittingAnswers ? 'Finding Matches...' : 'Skip to results'}
+
+                </button>
+
+              )}
+
+            </div>
+
+          </form>
+
+        )}
+
+      </section>
+
+
+
+      {/* Recommended Destinations Feed */}
+
+      {recommendations.length > 0 && (
+
+        <section id="recommendations-section" style={{ marginBottom: 32 }}>
+
+          <h2 style={{ fontSize: 22, marginBottom: 16 }}>Ranked Sabbatical Recommendations</h2>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 18 }}>
+
+            {recommendations.map((rec, idx) => {
+
+              const cat = catalogById(rec.destinationId)
+
+              const img = getDestinationImage(rec.destination, rec.imageUrl)
+
+              const hasCoords = Number.isFinite(rec.latitude) && Number.isFinite(rec.longitude)
+
+              return (
+
+                <div key={rec.destinationId || idx} className="card card-pad" style={{ padding: 20, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+
+                  <div>
+
+                    {img && (
+
+                      <img
+
+                        src={img}
+
+                        alt={rec.destination}
+
+                        loading="lazy"
+
+                        style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 10, marginBottom: 12 }}
+
+                      />
+
+                    )}
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+
+                      <span className="badge-pill badge-calm" style={{ fontSize: 10 }}>Match #{idx + 1}</span>
+
+                      <span style={{ fontSize: 11, color: 'hsl(var(--muted))' }}>{rec.location}</span>
+
+                    </div>
+
+                    <h3 style={{ margin: '0 0 6px', fontSize: 18 }}>{rec.destination}</h3>
+
+                    {cat && (
+
+                      <p style={{ margin: '0 0 8px', fontSize: 11, color: 'hsl(var(--sage-dark))', fontWeight: 600 }}>
+
+                        {[cat.category, cat.budgetLevel && `Budget: ${cat.budgetLevel}`, cat.duration && `Duration: ${cat.duration}`].filter(Boolean).join(' · ')}
+
+                      </p>
+
+                    )}
+
+                    <p style={{ margin: '0 0 10px', fontSize: 13, color: 'hsl(var(--muted))', lineHeight: 1.4 }}>
+
+                      {rec.description}
+
+                    </p>
+
+                    {Array.isArray(rec.activities) && rec.activities.length > 0 && (
+
+                      <p style={{ margin: '0 0 8px', fontSize: 11 }}>
+
+                        <strong>Activities:</strong> {rec.activities.join(', ')}
+
+                      </p>
+
+                    )}
+
+                    {rec.reason && (
+
+                      <p style={{ fontSize: 11, fontStyle: 'italic', color: 'hsl(var(--sage-dark))' }}>
+
+                        Why: {rec.reason}
+
+                      </p>
+
+                    )}
+
+                    {!hasCoords && (
+
+                      <p style={{ fontSize: 11, color: 'hsl(var(--muted))' }}>Map information not available.</p>
+
+                    )}
+
+                  </div>
+
+
+
+                  <div style={{ marginTop: 16, display: 'flex', gap: 8, position: 'relative', zIndex: 1 }}>
+
+                    <button
+
+                      type="button"
+
+                      className="button button-primary"
+
+                      style={{ flex: 1, fontSize: 11 }}
+
+                      disabled={!rec.destinationId}
+
+                      title={rec.destinationId ? 'View full destination details' : 'Details are not available for this destination'}
+
+                      onClick={() => handleOpenDestinationDetail(rec.destinationId)}
+
+                    >
+
+                      View Details
+
+                    </button>
+
+                    <button
+
+                      type="button"
+
+                      className="button button-quiet"
+
+                      style={{ fontSize: 11 }}
+
+                      disabled={!rec.destinationId}
+
+                      onClick={() => handleToggleRouteDestination(rec.destinationId)}
+
+                    >
+
+                      {selectedRouteDestIds.includes(rec.destinationId) ? '✓ In Route' : '+ Add Route'}
+
+                    </button>
+
+                  </div>
+
+                </div>
+
+              )
+
+            })}
+
+          </div>
+
+        </section>
+
+      )}
+
+
+
+      {/* Route Optimization & Interactive Map Section */}
+
+      <section id="travel-map-section" className="card card-pad" style={{ marginBottom: 32, padding: 24 }}>
+
+        <h2 className="card-title" style={{ margin: '0 0 4px', fontSize: 20 }}>Destination Map & Route Optimizer</h2>
+
+        <p className="card-caption" style={{ margin: '0 0 16px', fontSize: 12, color: 'hsl(var(--muted))' }}>
+
+          Pick two or more destinations. WorkBloom orders them with a nearest-neighbour heuristic over great-circle (Haversine) distance.
+
+        </p>
+
+
+
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
+
+          <span style={{ fontSize: 12, fontWeight: 600 }}>Selected Destinations ({selectedRouteDestIds.length}):</span>
+
+          {selectedRouteDestIds.map((id) => {
+
+            const destObj = catalogById(id)
+
+            return (
+
+              <span
+
+                key={id}
+
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 4px 3px 10px', borderRadius: 16, background: 'hsl(var(--sage-soft))', color: 'hsl(var(--sage-dark))', fontSize: 11, fontWeight: 700 }}
+
+              >
+
+                {destObj ? destObj.name : `ID #${id}`}
+
+                <button
+
+                  type="button"
+
+                  className="button button-quiet"
+
+                  style={{ fontSize: 10, padding: '2px 8px', borderRadius: 12 }}
+
+                  onClick={() => handleOpenDestinationDetail(id)}
+
+                  aria-label={`View details for ${destObj ? destObj.name : `destination ${id}`}`}
+
+                >
+
+                  View Details
+
+                </button>
+
+                <button
+
+                  type="button"
+
+                  className="button button-quiet"
+
+                  style={{ fontSize: 10, padding: '2px 7px', borderRadius: 12 }}
+
+                  onClick={() => handleToggleRouteDestination(id)}
+
+                  aria-label="Remove from route"
+
+                  title="Remove from route"
+
+                >
+
+                  ✕
+
+                </button>
+
+              </span>
+
+            )
+
+          })}
+
+
+
+          <button
+
+            className="button button-primary"
+
+            onClick={handleOptimizeRoute}
+
+            disabled={routeLoading || selectedRouteDestIds.length < 2}
+
+            style={{ marginLeft: 'auto', fontSize: 12 }}
+
+          >
+
+            {routeLoading ? 'Optimizing…' : 'Optimize destination order'}
+
+          </button>
+
+        </div>
+
+
+
+        {routePlan && (
+
+          <div style={{ marginBottom: 12, fontSize: 12 }}>
+
+            <strong>Optimized order:</strong>{' '}
+
+            {routePlan.points.map((p, i) => (
+
+              <span key={p.destinationId ?? i}>
+
+                {i > 0 && ' → '}
+
+                <button
+
+                  type="button"
+
+                  onClick={() => p.destinationId && handleOpenDestinationDetail(p.destinationId)}
+
+                  disabled={!p.destinationId}
+
+                  title="View details"
+
+                  style={{ all: 'unset', cursor: p.destinationId ? 'pointer' : 'default', textDecoration: p.destinationId ? 'underline dotted' : 'none', color: 'hsl(var(--sage-dark))', fontWeight: 600 }}
+
+                >
+
+                  {p.name}
+
+                </button>
+
+              </span>
+
+            ))}
+
+            {Number.isFinite(routePlan.totalDistanceKm) && (
+
+              <span style={{ color: 'hsl(var(--muted))' }}>
+
+                {' '}· ≈ {Math.round(routePlan.totalDistanceKm).toLocaleString()} km straight-line total
+
+              </span>
+
+            )}
+
+          </div>
+
+        )}
+
+
+
+        <TravelMap
+
+          destinations={mapDestinations}
+
+          route={routePlan?.points || null}
+
+          selectedDestination={mapFocusId}
+
+          onViewDetails={handleOpenDestinationDetail}
+
+        />
+
+      </section>
+
+
+
+      {/* Destination Catalog Section */}
+
+      <section style={{ marginBottom: 28 }}>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+
+          <div>
+
+            <h2 style={{ fontSize: 22, margin: 0 }}>Destination Catalog</h2>
+
+            <p style={{ margin: '2px 0 0', fontSize: 12, color: 'hsl(var(--muted))' }}>Explore all curated sanctuaries from Spring Boot</p>
+
+          </div>
+
+
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+
+            {/* Real DestinationCategory enum values (backend/.../travel/entity/DestinationCategory.java) -
+
+                the previous list ('MOUNTAIN', 'FOREST', 'WELLNESS_RETREAT') didn't match the actual enum,
+
+                causing a 400 Bad Request on every filter click. */}
+
+            {[
+
+              { value: '', label: 'All Categories' },
+
+              { value: 'NATURE', label: 'Nature' },
+
+              { value: 'MOUNTAINS', label: 'Mountains' },
+
+              { value: 'BEACH', label: 'Beach' },
+
+              { value: 'HERITAGE', label: 'Heritage' },
+
+              { value: 'CULTURAL', label: 'Cultural' },
+
+              { value: 'ADVENTURE', label: 'Adventure' },
+
+              { value: 'RELAXATION', label: 'Relaxation' },
+
+              { value: 'SPIRITUAL', label: 'Spiritual' },
+
+              { value: 'CITY', label: 'City' },
+
+            ].map(({ value: cat, label }) => (
+
+              <button
+
+                key={cat}
+
+                className={`button ${selectedCategory === cat ? 'button-primary' : 'button-quiet'}`}
+
+                style={{ fontSize: 11, padding: '4px 10px' }}
+
+                onClick={() => handleCategoryFilter(cat)}
+
+              >
+
+                {label}
+
+              </button>
+
+            ))}
+
+          </div>
+
+        </div>
+
+
+
+        {catalogError && (
+
+          <div role="alert" style={{ padding: 12, borderRadius: 10, background: 'hsl(var(--coral-soft) / 0.4)', fontSize: 13, marginBottom: 12 }}>
+
+            Could not load destinations: {catalogError}
+
+          </div>
+
+        )}
+
+        {!catalogError && allDestinations.length === 0 && (
+
+          <p style={{ fontSize: 13, color: 'hsl(var(--muted))' }}>No destinations found{selectedCategory ? ' in this category' : ' in the database'}.</p>
+
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
+
+          {allDestinations.map((d) => (
+
+            <div key={d.id} className="card card-pad" style={{ padding: 18, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+
+              <div>
+
+                {getDestinationImage(d.name, d.imageUrl) && (
+
+                  <img
+
+                    src={getDestinationImage(d.name, d.imageUrl)}
+
+                    alt={d.name}
+
+                    loading="lazy"
+
+                    style={{ width: '100%', height: 140, objectFit: 'cover', borderRadius: 8, marginBottom: 10 }}
+
+                  />
+
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+
+                  <span style={{ fontSize: 11, color: 'hsl(var(--sage-dark))', fontWeight: 700 }}>{d.category || 'Uncategorised'}</span>
+
+                  <span style={{ fontSize: 11, color: 'hsl(var(--muted))' }}>{d.location}</span>
+
+                </div>
+
+                <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>{d.name}</h3>
+
+                <p style={{ margin: '0 0 8px', fontSize: 12, color: 'hsl(var(--muted))', lineHeight: 1.4 }}>
+
+                  {d.description ? (d.description.length > 100 ? `${d.description.slice(0, 98)}...` : d.description) : ''}
+
+                </p>
+
+              </div>
+
+
+
+              <div style={{ marginTop: 12, display: 'flex', gap: 8, position: 'relative', zIndex: 1 }}>
+
+                <button
+
+                  type="button"
+
+                  className="button button-quiet"
+
+                  style={{ flex: 1, fontSize: 11 }}
+
+                  onClick={() => handleOpenDestinationDetail(d.id)}
+
+                >
+
+                  View Details
+
+                </button>
+
+                <button
+
+                  type="button"
+
+                  className="button button-primary"
+
+                  style={{ fontSize: 11 }}
+
+                  onClick={() => handleToggleRouteDestination(d.id)}
+
+                >
+
+                  {selectedRouteDestIds.includes(d.id) ? '✓ Added' : '+ Add Route'}
+
+                </button>
+
+              </div>
+
+            </div>
+
+          ))}
+
+        </div>
+
+      </section>
+
+
+
+      {/* Destination Detail Modal */}
+
+      {detailModal && createPortal(
+
+
+      <div
+        className="travel-detail-backdrop"
+        onClick={() => setDetailModal(false)}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 99999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px',
+          background: 'rgba(20, 35, 28, 0.55)',
+          backdropFilter: 'blur(6px)',
+          WebkitBackdropFilter: 'blur(6px)',
+          overflowY: 'auto',
+          boxSizing: 'border-box',
+        }}
+      >
+        <div
+          className="travel-detail-modal"
           style={{
-            marginBottom: 32,
+            position: 'relative',
+            zIndex: 100000,
+            width: '100%',
+            maxWidth: '560px',
+            maxHeight: 'calc(100vh - 48px)',
+            overflowY: 'auto',
+            padding: '24px',
             background: 'hsl(var(--paper))',
-            border: '1.5px solid hsl(var(--sage) / 0.7)',
-            boxShadow: '0 4px 20px -8px hsl(var(--sage) / 0.15)',
+            color: 'hsl(var(--ink))',
+            borderRadius: '16px',
+            border: '1px solid hsl(var(--line))',
+            boxShadow: '0 24px 80px rgba(0, 0, 0, 0.25)',
+            boxSizing: 'border-box',
+            display: 'block',
+            visibility: 'visible',
+            opacity: 1,
+            transform: 'none',
+            filter: 'none',
+            animation: 'none',
           }}
+          onClick={(e) => e.stopPropagation()}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="badge-pill badge-calm" style={{ fontWeight: 700 }}>
-                  🧠 AI Diagnostic Assessment
-                </span>
-                <span style={{ fontSize: 11, color: 'hsl(var(--muted))' }}>
-                  Architecture: <strong style={{ color: 'hsl(var(--ink))' }}>n8n Webhook ⟷ Ollama LLM</strong>
-                </span>
-              </div>
-              <h2 style={{ fontSize: 22, margin: '6px 0 4px' }}>Find Your Most Biologically Appropriate Sanctuary</h2>
-              <p style={{ margin: 0, fontSize: 13, color: 'hsl(var(--muted))' }}>
-                Answer these 5 quick restorative questions so the AI agent can diagnose your nervous-system depletion and select the optimal haven.
-              </p>
-            </div>
-            {aiResult && (
-              <button
-                type="button"
-                className="button button-quiet"
-                style={{ fontSize: 11 }}
-                onClick={() => setAiResult(null)}
-              >
-                ↺ Clear & Retake
-              </button>
-            )}
-          </div>
 
-          <form onSubmit={handleRunAiAssessment}>
-            {/* Question 1: Mood */}
-            <div style={{ marginBottom: 22 }}>
-              <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 8 }}>
-                1. What is the prevailing state of your nervous system today?
-              </label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
-                {MOODS.map((m) => {
-                  const isSelected = qMood === m.id
-                  return (
-                    <motion.button
-                      key={m.id}
-                      type="button"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setQMood(m.id)}
-                      style={{
-                        textAlign: 'left',
-                        padding: '10px 12px',
-                        borderRadius: 10,
-                        border: isSelected ? '2px solid hsl(var(--sage-dark))' : '1px solid hsl(var(--line))',
-                        background: isSelected ? 'hsl(var(--sage-soft) / 0.4)' : 'hsl(var(--canvas) / 0.5)',
-                        cursor: 'pointer',
-                        transition: 'border-color 0.15s, background-color 0.15s',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <span>{m.emoji}</span>
-                        <strong style={{ fontSize: 12, color: isSelected ? 'hsl(var(--sage-dark))' : 'inherit' }}>
-                          {m.label}
-                        </strong>
-                      </div>
-                      <div style={{ fontSize: 10, color: 'hsl(var(--muted))', lineHeight: 1.3 }}>
-                        {m.summary}
-                      </div>
-                    </motion.button>
-                  )
-                })}
-              </div>
-            </div>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
 
-            {/* Question 2: Energy & Battery Reserve */}
-            <div style={{ marginBottom: 22 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <label style={{ fontWeight: 600, fontSize: 13 }}>
-                  2. What is your physical battery level right now? (1 = Completely spent, 10 = High vitality)
-                </label>
-                <span className="badge-pill" style={{ fontWeight: 700, fontSize: 12 }}>
-                  {qEnergy}/10 {qEnergy <= 3 ? '🔴 Running on fumes' : qEnergy <= 6 ? '🟡 Gentle reserve' : '🟢 Lifted'}
-                </span>
-              </div>
-              <input
-                type="range"
-                min="1"
-                max="10"
-                value={qEnergy}
-                onChange={(e) => setQEnergy(Number(e.target.value))}
-                style={{ width: '100%', accentColor: 'hsl(var(--sage-dark))', cursor: 'pointer' }}
-              />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'hsl(var(--muted))', marginTop: 4 }}>
-                <span>1 - Severe burnout / Needs sleep</span>
-                <span>5 - Moderate pacing</span>
-                <span>10 - High adventure readiness</span>
-              </div>
-            </div>
+              <h2 style={{ margin: 0, fontSize: 20 }}>Sanctuary Details</h2>
 
-            {/* Question 3: Primary Source of Burnout */}
-            <div style={{ marginBottom: 22 }}>
-              <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 8 }}>
-                3. What has been the primary drain on your vitality lately?
-              </label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
-                {DEPLETION_FACTORS.map((df) => {
-                  const isSelected = qDepletion === df.id
-                  return (
-                    <motion.button
-                      key={df.id}
-                      type="button"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setQDepletion(df.id)}
-                      style={{
-                        textAlign: 'left',
-                        padding: '10px 12px',
-                        borderRadius: 10,
-                        border: isSelected ? '2px solid hsl(var(--sage-dark))' : '1px solid hsl(var(--line))',
-                        background: isSelected ? 'hsl(var(--sage-soft) / 0.4)' : 'hsl(var(--canvas) / 0.5)',
-                        cursor: 'pointer',
-                        transition: 'border-color 0.15s, background-color 0.15s',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <span>{df.icon}</span>
-                        <strong style={{ fontSize: 12, color: isSelected ? 'hsl(var(--sage-dark))' : 'inherit' }}>
-                          {df.label}
-                        </strong>
-                      </div>
-                      <div style={{ fontSize: 10, color: 'hsl(var(--muted))' }}>
-                        {df.desc}
-                      </div>
-                    </motion.button>
-                  )
-                })}
-              </div>
-            </div>
+              <button className="modal-close-btn" onClick={() => setDetailModal(false)}>✕</button>
 
-            {/* Question 4: Healing Sensory Preference */}
-            <div style={{ marginBottom: 22 }}>
-              <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 8 }}>
-                4. Which natural sensory profile calls to your nervous system?
-              </label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
-                {SENSORY_PREFERENCES.map((sp) => {
-                  const isSelected = qSensory === sp.id
-                  return (
-                    <motion.button
-                      key={sp.id}
-                      type="button"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setQSensory(sp.id)}
-                      style={{
-                        textAlign: 'left',
-                        padding: '10px 12px',
-                        borderRadius: 10,
-                        border: isSelected ? '2px solid hsl(var(--sage-dark))' : '1px solid hsl(var(--line))',
-                        background: isSelected ? 'hsl(var(--sage-soft) / 0.4)' : 'hsl(var(--canvas) / 0.5)',
-                        cursor: 'pointer',
-                        transition: 'border-color 0.15s, background-color 0.15s',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span>{sp.icon}</span>
-                        <span style={{ fontSize: 12, color: isSelected ? 'hsl(var(--sage-dark))' : 'inherit', fontWeight: isSelected ? 600 : 400 }}>
-                          {sp.label}
-                        </span>
-                      </div>
-                    </motion.button>
-                  )
-                })}
-              </div>
-            </div>
+            </div>
 
-            {/* Question 5: Core Sabbatical Intention */}
-            <div style={{ marginBottom: 26 }}>
-              <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 8 }}>
-                5. What is your fundamental intention for this retreat?
-              </label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
-                {RECHARGE_GOALS.map((rg) => {
-                  const isSelected = qGoal === rg.id
-                  return (
-                    <motion.button
-                      key={rg.id}
-                      type="button"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setQGoal(rg.id)}
-                      style={{
-                        textAlign: 'left',
-                        padding: '10px 12px',
-                        borderRadius: 10,
-                        border: isSelected ? '2px solid hsl(var(--sage-dark))' : '1px solid hsl(var(--line))',
-                        background: isSelected ? 'hsl(var(--sage-soft) / 0.4)' : 'hsl(var(--canvas) / 0.5)',
-                        cursor: 'pointer',
-                        transition: 'border-color 0.15s, background-color 0.15s',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span>{rg.icon}</span>
-                        <span style={{ fontSize: 12, color: isSelected ? 'hsl(var(--sage-dark))' : 'inherit', fontWeight: isSelected ? 600 : 400 }}>
-                          {rg.label}
-                        </span>
-                      </div>
-                    </motion.button>
-                  )
-                })}
-              </div>
-            </div>
 
-            {/* Submission CTA */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                <motion.button
-                  type="submit"
-                  className="button button-primary"
-                  disabled={aiLoading}
-                  whileHover={{ scale: aiLoading ? 1 : 1.02 }}
-                  whileTap={{ scale: aiLoading ? 1 : 0.98 }}
-                  style={{ padding: '11px 26px', fontSize: 14 }}
-                >
-                  {aiLoading ? '🧠 Evaluating via n8n & Ollama...' : '✨ Prescribe Most Appropriate Destination (AI)'}
-                </motion.button>
-                <span style={{ fontSize: 11, color: 'hsl(var(--muted))' }}>
-                  Sends telemetry to <code>/webhook/workbloom/travel-destination</code> (n8n + Ollama LLM)
-                </span>
-              </div>
-              {aiLoading && (
-                <div style={{ width: '100%', height: 4, background: 'hsl(var(--line))', borderRadius: 2, overflow: 'hidden', marginTop: 6 }}>
-                  <motion.div
-                    animate={{ x: ['-100%', '100%'] }}
-                    transition={{ repeat: Infinity, duration: 1.2, ease: 'easeInOut' }}
-                    style={{ width: '50%', height: '100%', background: 'hsl(var(--sage-dark))', borderRadius: 2 }}
-                  />
-                </div>
-              )}
-            </div>
-          </form>
 
-          {/* AI RESULT DISPLAY: THE MOST APPROPRIATE DESTINATION */}
-          <AnimatePresence>
-            {aiResult && aiResult.destination && (
-              <motion.div
-                id="ai-destination-result"
-                initial={{ opacity: 0, y: 24, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 15 }}
-                transition={{ duration: 0.45, ease: 'easeOut' }}
-                style={{
-                  marginTop: 28,
-                  padding: 24,
-                  borderRadius: 16,
-                  background: 'hsl(var(--paper-warm))',
-                  border: '2px solid hsl(var(--sage-dark))',
-                  boxShadow: '0 8px 30px -10px rgba(46, 125, 88, 0.25)',
-                }}
-              >
-                {/* Temporary Photographic Landscape Banner */}
-                <div style={{ position: 'relative', height: 240, borderRadius: 12, overflow: 'hidden', marginBottom: 18 }}>
-                  <motion.img
-                    src={aiResult.destination.imageUrl || aiResult.destination.temporaryImage}
-                    alt={aiResult.destination.name}
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      e.currentTarget.src = aiResult.destination.temporaryImage || `https://picsum.photos/seed/haven-${aiResult.destination.id}/900/600`
-                    }}
-                    initial={{ scale: 1.06 }}
-                    animate={{ scale: 1.0 }}
-                    transition={{ duration: 0.8 }}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                  <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(14, 30, 22, 0.88) 0%, rgba(14, 30, 22, 0.3) 55%, transparent 100%)' }} />
-                  <div style={{ position: 'absolute', bottom: 16, left: 18, right: 18, color: '#ffffff' }}>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-                      <span style={{ fontSize: 11, background: 'rgba(46, 125, 88, 0.95)', padding: '3px 10px', borderRadius: 6, fontWeight: 700 }}>
-                        🌟 Most Appropriate Destination ({aiResult.matchScore}% Biological Match)
-                      </span>
-                      <span style={{ fontSize: 11, background: 'rgba(0, 0, 0, 0.65)', padding: '3px 10px', borderRadius: 6, backdropFilter: 'blur(4px)' }}>
-                        📍 {aiResult.destination.location}, {aiResult.destination.country}
-                      </span>
-                      <span style={{ fontSize: 11, background: 'rgba(0, 0, 0, 0.55)', padding: '3px 10px', borderRadius: 6 }}>
-                        ⚡ {aiResult.engine}
-                      </span>
-                    </div>
-                    <h3 style={{ margin: '0 0 2px', fontSize: 26, fontWeight: 700, color: '#ffffff', textShadow: '0 2px 6px rgba(0,0,0,0.5)' }}>
-                      {aiResult.destination.name}
-                    </h3>
-                    <p style={{ margin: 0, fontSize: 13, color: '#e2ece5' }}>
-                      Theme: {aiResult.destination.theme} · Pace: {aiResult.destination.idealPace}
-                    </p>
-                  </div>
-                </div>
+            {detailError ? (
 
-                {/* AI Rationale Box */}
-                <div
-                  style={{
-                    padding: 16,
-                    borderRadius: 12,
-                    background: 'hsl(var(--paper))',
-                    border: '1px solid hsl(var(--line))',
-                    marginBottom: 18,
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                    <span style={{ fontSize: 16 }}>🌿</span>
-                    <strong style={{ fontSize: 13, color: 'hsl(var(--sage-dark))' }}>
-                      AI Clinical & Somatic Rationale:
-                    </strong>
-                  </div>
-                  <p style={{ margin: '0 0 10px', fontSize: 13, lineHeight: 1.6, color: 'hsl(var(--ink))' }}>
-                    {aiResult.aiReasoning}
-                  </p>
-                  <div style={{ fontSize: 12, color: 'hsl(var(--muted))', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                    <span>
-                      <strong>Biological Benefit:</strong> {aiResult.biologicalBenefit}
-                    </span>
-                    <span>
-                      <strong>Sensory Rating:</strong> {aiResult.destination.sensoryLevel}
-                    </span>
-                  </div>
-                </div>
+              <div role="alert" style={{ padding: 16, fontSize: 13 }}>{detailError}</div>
 
-                {/* 4-Part Daily Restorative Schedule */}
-                {aiResult.recommendedDailyRhythm && (
-                  <div style={{ marginBottom: 20 }}>
-                    <strong style={{ display: 'block', fontSize: 13, marginBottom: 10, color: 'hsl(var(--ink))' }}>
-                      🗓️ Curated Daily Rhythm at {aiResult.destination.name}:
-                    </strong>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
-                      {aiResult.recommendedDailyRhythm.map((slot, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            padding: 12,
-                            borderRadius: 10,
-                            background: 'hsl(var(--canvas) / 0.5)',
-                            border: '1px solid hsl(var(--line) / 0.7)',
-                          }}
-                        >
-                          <span style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--sage-dark))' }}>
-                            {slot.time}
-                          </span>
-                          <p style={{ margin: '4px 0 0', fontSize: 12, color: 'hsl(var(--ink))', lineHeight: 1.4 }}>
-                            {slot.activity}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+            ) : !activeDestination ? (
 
-                {/* CTA Action Buttons */}
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <motion.button
-                    type="button"
-                    className="button button-primary"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => {
-                      selectHavenForRoute(`${aiResult.destination.name}, ${aiResult.destination.country}`)
-                    }}
-                  >
-                    🗺️ Load & Optimize Route on Map ↓
-                  </motion.button>
-                  <motion.button
-                    type="button"
-                    className="button button-quiet"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => {
-                      addToast(`Applied $1,500 Rest Stipend to ${aiResult.destination.name}! Pre-registered with HR. 💼`)
-                    }}
-                  >
-                    💼 Pre-authorize with $1,500 Rest Stipend
-                  </motion.button>
-                  <span style={{ fontSize: 11, color: 'hsl(var(--muted))' }}>
-                    Status: {aiResult.n8nServiceStatus}
-                  </span>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </section>
-      )}
+              <div style={{ padding: 20, textAlign: 'center' }}>
 
-      {/* ========================================================================= */}
-      {/* TAB 2: BROWSE ALL SANCTUARIES (Direct Mood Filter) */}
-      {/* ========================================================================= */}
-      {activeTab === 'browse' && (
-        <section className="card card-pad" style={{ marginBottom: 28, background: 'hsl(var(--paper))', border: '1px solid hsl(var(--line))' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="badge-pill badge-calm">🧠 Mood-Based Engine</span>
-                <span style={{ fontSize: 12, color: 'hsl(var(--muted))' }}>
-                  Active Logged Mood: <strong style={{ color: 'hsl(var(--sage-dark))' }}>{selectedMood}</strong>
-                </span>
-              </div>
-              <h2 style={{ fontSize: 20, margin: '6px 0 2px' }}>Browse Restorative Havens by Emotion State</h2>
-              <p style={{ margin: 0, fontSize: 12, color: 'hsl(var(--muted))' }}>
-                Select a mood to rank sanctuaries according to neurological recovery compatibility.
-              </p>
-            </div>
-          </div>
+                <div className="skeleton" style={{ height: 180, borderRadius: 12 }} />
 
-          {/* Mood Selector Buttons */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 20 }}>
-            {MOODS.map((m) => {
-              const isSelected = selectedMood === m.id
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => handleMoodSelect(m.id)}
-                  style={{
-                    textAlign: 'left',
-                    padding: '12px 14px',
-                    borderRadius: 12,
-                    border: isSelected ? '2px solid hsl(var(--sage-dark))' : '1px solid hsl(var(--line))',
-                    background: isSelected ? 'hsl(var(--sage-soft) / 0.35)' : 'hsl(var(--canvas) / 0.5)',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontSize: 18 }}>{m.emoji}</span>
-                    <strong style={{ fontSize: 13, color: isSelected ? 'hsl(var(--sage-dark))' : 'inherit' }}>
-                      {m.label}
-                    </strong>
-                  </div>
-                  <div style={{ fontSize: 11, color: 'hsl(var(--muted))', lineHeight: 1.35 }}>
-                    {m.summary}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
+              </div>
 
-          {/* Top Mood Match Spotlight */}
-          {topMatch && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-              style={{
-                padding: 16,
-                borderRadius: 12,
-                background: 'hsl(var(--paper-warm))',
-                border: '1.5px solid hsl(var(--sage-dark))',
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-                gap: 16,
-                alignItems: 'center',
-              }}
-            >
-              <div style={{ position: 'relative', height: 140, borderRadius: 10, overflow: 'hidden' }}>
-                <img
-                  src={topMatch.imageUrl || topMatch.temporaryImage}
-                  alt={topMatch.name}
-                  referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    e.currentTarget.src = topMatch.temporaryImage || `https://picsum.photos/seed/haven-${topMatch.id}/800/500`
-                  }}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 60%)' }} />
-                <div style={{ position: 'absolute', bottom: 8, left: 10, right: 10 }}>
-                  <span style={{ fontSize: 11, color: '#ffffff', fontWeight: 600, textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
-                    📍 {topMatch.location}
-                  </span>
-                </div>
-              </div>
+            ) : (
 
-              <div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                  <span className="badge-pill badge-calm" style={{ fontSize: 10, fontWeight: 700 }}>
-                    🌟 Top Recommendation for {selectedMood} ({topMatch.matchScore || 98}% Affinity)
-                  </span>
-                </div>
-                <h3 style={{ margin: '0 0 6px', fontSize: 18 }}>{topMatch.name}</h3>
-                <p style={{ fontSize: 12, color: 'hsl(var(--ink))', lineHeight: 1.5, margin: '0 0 8px' }}>
-                  {topMatch.moodReason || topMatch.description}
-                </p>
-                <div style={{ fontSize: 11, color: 'hsl(var(--sage-dark))', fontWeight: 600 }}>
-                  Sensory Profile: <span style={{ fontWeight: 400, color: 'hsl(var(--muted))' }}>{topMatch.sensoryLevel || 'Low stimulation'}</span>
-                </div>
-              </div>
+              (() => {
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
-                <div style={{ fontSize: 11, color: 'hsl(var(--muted))' }}>
-                  Need: <strong style={{ color: 'hsl(var(--ink))' }}>{currentMoodObj.need}</strong>
-                </div>
-                <motion.button
-                  type="button"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="button button-primary"
-                  style={{ width: '100%' }}
-                  onClick={() => {
-                    selectHavenForRoute(`${topMatch.name}, ${topMatch.country}`)
-                  }}
-                >
-                  Plan & map itinerary to this haven →
-                </motion.button>
-              </div>
-            </motion.div>
-          )}
-        </section>
-      )}
+                const d = activeDestination
 
-      {/* Itinerary Optimizer & Sabbatical Stipend */}
-      <div id="route-optimizer-box" className="dashboard-grid" style={{ marginBottom: 20 }}>
-        <div className="card card-pad">
-          <h2 className="card-title">Restorative Route Optimizer</h2>
-          <p className="card-caption">Calculate a gentle journey with nervous-system recovery in mind</p>
+                const localImg = getDestinationImage(d.name, null)
 
-          <form onSubmit={handleOptimizeRoute} style={{ marginTop: 16 }}>
-            <div className="field">
-              <label>Starting point (Indian Departure City)</label>
-              <input value={origin} onChange={(e) => setOrigin(e.target.value)} required />
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                <span style={{ fontSize: 11, color: 'hsl(var(--muted))', alignSelf: 'center' }}>Quick Select:</span>
-                {['Bengaluru', 'Mumbai', 'Delhi', 'Chennai', 'Hyderabad', 'Pune', 'Kochi', 'Goa'].map((city) => {
-                  const fullCity = INDIAN_ORIGIN_CITIES.find((c) => c.startsWith(city)) || `${city}, India`
-                  const isSelected = origin === fullCity
-                  return (
-                    <button
-                      key={city}
-                      type="button"
-                      onClick={() => {
-                        setOrigin(fullCity)
-                        handleOptimizeRoute(null, fullCity, dest)
-                      }}
-                      style={{
-                        fontSize: 10,
-                        padding: '3px 8px',
-                        borderRadius: 6,
-                        border: isSelected ? '1.5px solid hsl(var(--sage-dark))' : '1px solid hsl(var(--line))',
-                        background: isSelected ? 'hsl(var(--sage-soft))' : 'hsl(var(--canvas))',
-                        color: isSelected ? 'hsl(var(--sage-dark))' : 'hsl(var(--ink))',
-                        fontWeight: isSelected ? 700 : 400,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {city}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-            <div className="field">
-              <label>Destination (Selected by AI or manually)</label>
-              <select
-                value={dest}
-                onChange={(e) => {
-                  setDest(e.target.value)
-                  handleOptimizeRoute(null, origin, e.target.value)
-                }}
-              >
-                {destinations.map((d) => (
-                  <option key={d.id} value={`${d.name}, ${d.country}`}>
-                    {d.name} ({d.country}) · {d.matchScore ? `${d.matchScore}% match for ${selectedMood}` : d.theme}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label>Pacing & transit focus</label>
-              <select
-                value={pacingMode}
-                onChange={(e) => {
-                  setPacingMode(e.target.value)
-                }}
-              >
-                <option value="Scenic & Slow Pacing">Scenic & Slow Pacing (Minimal rush, scenic mountain/ghat transit)</option>
-                <option value="Minimum Context Switching">Minimum Context Switching (Direct connections only)</option>
-                <option value="Nature Immersion">Nature Immersion (Pause near national parks & reserve forests)</option>
-              </select>
-            </div>
-            <motion.button
-              type="submit"
-              className="button button-primary"
-              disabled={planning}
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-              style={{ width: '100%' }}
-            >
-              {planning ? 'Planning gentle route...' : 'Generate & Visualize Restorative Itinerary'}
-            </motion.button>
-          </form>
+                const hero = localImg || d.imageUrl
 
-          {routePlan && (
-            <div style={{ marginTop: 20, padding: 14, background: 'hsl(var(--paper-warm))', borderRadius: 12, border: '1px solid hsl(var(--line))' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span className="badge-pill badge-calm">🌿 Optimized Itinerary</span>
-                <span style={{ fontSize: 11, color: 'hsl(var(--muted))' }}>Rest score: {routePlan.restScore || 95}/100</span>
-              </div>
-              <p style={{ fontSize: 13, margin: '0 0 10px', color: 'hsl(var(--ink))' }}>
-                {routePlan.sceneryNotes || `Travel from ${origin} to ${dest} designed with gentle layovers and 2 quiet recharge stops.`}
-              </p>
-              {routePlan.optimizedRoute && (
-                <div style={{ marginTop: 8, fontSize: 11, display: 'grid', gap: 4 }}>
-                  <strong style={{ color: 'hsl(var(--sage-dark))' }}>Itinerary Waypoints:</strong>
-                  {routePlan.optimizedRoute.map((stop, idx) => (
-                    <div key={idx} style={{ color: 'hsl(var(--muted))' }}>
-                      {idx + 1}. {stop}
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div style={{ fontSize: 11, color: 'hsl(var(--sage-dark))', marginTop: 8 }}>
-                🍃 Carbon offset included via WorkBloom Green Sabbatical Fund.
-              </div>
-            </div>
-          )}
-        </div>
+                const hasCoords = Number.isFinite(d.latitude) && Number.isFinite(d.longitude)
 
-        <div className="card card-pad">
-          <h2 className="card-title">Retreat & Sabbatical Guidance</h2>
-          <p className="card-caption">WorkBloom intentional rest policies</p>
-          <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
-            <div style={{ padding: 12, borderRadius: 10, background: 'hsl(var(--canvas) / 0.5)' }}>
-              <strong>✈️ $1,500 Annual Rest Stipend</strong>
-              <p style={{ margin: '4px 0 0', fontSize: 11, color: 'hsl(var(--muted))' }}>
-                Reimbursement for nature retreats, train passes, cabin rentals, and off-grid sanctuaries.
-              </p>
-            </div>
-            <div style={{ padding: 12, borderRadius: 10, background: 'hsl(var(--canvas) / 0.5)' }}>
-              <strong>🔋 Unplugged Sabbaticals</strong>
-              <p style={{ margin: '4px 0 0', fontSize: 11, color: 'hsl(var(--muted))' }}>
-                After 3 years, take 4 consecutive fully-paid weeks without email or Slack.
-              </p>
-            </div>
-            <div style={{ padding: 12, borderRadius: 10, background: 'hsl(var(--canvas) / 0.5)' }}>
-              <strong>🧭 Transit Without Rush</strong>
-              <p style={{ margin: '4px 0 0', fontSize: 11, color: 'hsl(var(--muted))' }}>
-                Company travel policy encourages sleeper trains and slow scenic travel over redeyes.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+                const rows = [
 
-      {/* Interactive Restorative Route Map Display */}
-      <div style={{ marginBottom: 28 }}>
-        <RouteMap routePlan={routePlan} />
-      </div>
+                  ['Category', d.category],
 
-      {/* Havens Gallery with Mood Affinity Scores */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-        <div>
-          <h2 style={{ fontSize: 22, margin: 0 }}>All Curated Restorative Havens</h2>
-          <p style={{ margin: '2px 0 0', fontSize: 12, color: 'hsl(var(--muted))' }}>
-            Ranked by match for your current state: <strong style={{ color: 'hsl(var(--sage-dark))' }}>{selectedMood}</strong>
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            type="button"
-            className={`button ${!moodFilterOnly ? 'button-primary' : 'button-quiet'}`}
-            style={{ fontSize: 11, padding: '4px 10px' }}
-            onClick={() => setMoodFilterOnly(false)}
-          >
-            All Havens ({destinations.length})
-          </button>
-          <button
-            type="button"
-            className={`button ${moodFilterOnly ? 'button-primary' : 'button-quiet'}`}
-            style={{ fontSize: 11, padding: '4px 10px' }}
-            onClick={() => setMoodFilterOnly(true)}
-          >
-            Top Matches Only (≥90%)
-          </button>
-        </div>
-      </div>
+                  ['Environment', d.environment],
 
-      {loading && (
-        <div style={{ display: 'grid', gap: 16 }}>
-          <div className="skeleton" style={{ height: 160 }} />
-          <div className="skeleton" style={{ height: 160 }} />
-        </div>
-      )}
+                  ['Budget Level', d.budgetLevel],
 
-      {error && <div className="alert">{error}</div>}
+                  ['Duration', d.duration],
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 18 }}>
-        {displayedDestinations.map((d) => {
-          const isTop = d.matchScore >= 95
-          return (
-            <motion.div
-              key={d.id}
-              className="card card-pad"
-              whileHover={{ y: -5, boxShadow: '0 8px 24px -6px rgba(46, 125, 88, 0.22)' }}
-              transition={{ duration: 0.2 }}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                border: isTop ? '1.5px solid hsl(var(--sage-dark))' : '1px solid hsl(var(--line))',
-                overflow: 'hidden',
-              }}
-            >
-              <div>
-                {/* Photographic Temporary Haven Image with Hover Zoom */}
-                <div style={{ position: 'relative', height: 175, borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
-                  <motion.img
-                    src={d.imageUrl || d.temporaryImage}
-                    alt={d.name}
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      e.currentTarget.src = d.temporaryImage || `https://picsum.photos/seed/haven-${d.id}/800/500`
-                    }}
-                    whileHover={{ scale: 1.07 }}
-                    transition={{ duration: 0.35, ease: 'easeOut' }}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                  <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(14, 30, 22, 0.7) 0%, rgba(14, 30, 22, 0.1) 50%, transparent 100%)' }} />
-                  <div style={{ position: 'absolute', top: 8, right: 8 }}>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        padding: '3px 8px',
-                        borderRadius: 6,
-                        background: isTop ? 'rgba(46, 125, 88, 0.95)' : 'rgba(0, 0, 0, 0.65)',
-                        color: '#ffffff',
-                        backdropFilter: 'blur(4px)',
-                      }}
-                    >
-                      {d.matchScore ? `✨ ${d.matchScore}% Match` : d.theme}
-                    </span>
-                  </div>
-                  <div style={{ position: 'absolute', bottom: 8, left: 10, right: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                    <span style={{ fontSize: 11, color: '#ffffff', fontWeight: 600, textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
-                      📍 {d.location}
-                    </span>
-                    <span style={{ fontSize: 10, background: 'rgba(255,255,255,0.25)', backdropFilter: 'blur(4px)', color: '#ffffff', padding: '2px 6px', borderRadius: 4 }}>
-                      {d.idealPace}
-                    </span>
-                  </div>
-                </div>
+                  ['Best Time to Visit', d.bestTimeToVisit],
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
-                  <span className={`badge-pill ${isTop ? 'badge-calm' : ''}`} style={{ fontSize: 10 }}>
-                    🌿 {d.theme}
-                  </span>
-                  <span style={{ fontSize: 11, color: 'hsl(var(--muted))' }}>{d.country}</span>
-                </div>
-                <h3 style={{ margin: '0 0 6px', fontSize: 18 }}>{d.name}</h3>
-                <p style={{ fontSize: 13, color: 'hsl(var(--muted))', lineHeight: 1.5, margin: '0 0 10px' }}>
-                  {d.description}
-                </p>
+                  ['Activities', Array.isArray(d.activities) && d.activities.length ? d.activities.join(', ') : null],
 
-                {d.moodReason && (
-                  <div style={{ padding: '8px 10px', borderRadius: 8, background: 'hsl(var(--paper-warm))', fontSize: 11, color: 'hsl(var(--ink))', marginBottom: 12 }}>
-                    <strong>Why it restores you:</strong> {d.moodReason}
-                  </div>
-                )}
+                  ['Latitude', hasCoords ? d.latitude.toFixed(4) : null],
 
-                <div style={{ fontSize: 11, color: 'hsl(var(--sage-dark))', fontWeight: 600 }}>
-                  Highlights: <span style={{ fontWeight: 400, color: 'hsl(var(--muted))' }}>{d.highlights?.join(' · ') || 'Quiet walks, local cuisine'}</span>
-                </div>
-                <div style={{ fontSize: 11, color: 'hsl(var(--sage-dark))', fontWeight: 600, marginTop: 4 }}>
-                  Sensory Level: <span style={{ fontWeight: 400, color: 'hsl(var(--muted))' }}>{d.sensoryLevel || 'Quiet retreat'}</span>
-                </div>
-              </div>
+                  ['Longitude', hasCoords ? d.longitude.toFixed(4) : null],
 
-              <div style={{ marginTop: 18 }}>
-                <motion.button
-                  type="button"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className={`button ${dest === `${d.name}, ${d.country}` ? 'button-primary' : 'button-quiet'}`}
-                  style={{ width: '100%' }}
-                  onClick={() => {
-                    selectHavenForRoute(`${d.name}, ${d.country}`)
-                  }}
-                >
-                  {dest === `${d.name}, ${d.country}` ? '✓ Mapped on Itinerary' : 'Select & Map Route'}
-                </motion.button>
-              </div>
-            </motion.div>
-          )
-        })}
-      </div>
-    </div>
-  )
+                ]
+
+                const rec = recommendations.find((r) => r.destinationId === d.id)
+
+                return (
+
+                  <div>
+
+                    {hero && (
+
+                      <img
+
+                        src={hero}
+
+                        alt={d.name}
+
+                        style={{ width: '100%', height: 200, objectFit: 'cover', borderRadius: 12, marginBottom: 16 }}
+
+                      />
+
+                    )}
+
+
+
+                    <h3 style={{ margin: '0 0 4px', fontSize: 22 }}>{d.name}</h3>
+
+                    <p style={{ margin: '0 0 12px', fontSize: 13, color: 'hsl(var(--sage-dark))', fontWeight: 600 }}>
+
+                      📍 {d.location || [d.city, d.state, d.country].filter(Boolean).join(', ') || 'Location not available'}
+
+                    </p>
+
+
+
+                    <p style={{ fontSize: 13, lineHeight: 1.5, color: 'hsl(var(--ink))', marginBottom: 16 }}>
+
+                      {d.description}
+
+                    </p>
+
+
+
+                    {rec?.reason && (
+
+                      <p style={{ fontSize: 12, fontStyle: 'italic', color: 'hsl(var(--sage-dark))', marginBottom: 12 }}>
+
+                        Why it matches you: {rec.reason}
+
+                      </p>
+
+                    )}
+
+
+
+                    <div className="detail-list" style={{ display: 'grid', gap: 8, fontSize: 12, marginBottom: 16 }}>
+
+                      {rows.map(([label, value]) => (
+
+                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '6px 10px', background: 'hsl(var(--canvas) / 0.5)', borderRadius: 6 }}>
+
+                          <span style={{ color: 'hsl(var(--muted))' }}>{label}</span>
+
+                          <strong style={{ textAlign: 'right' }}>{value || 'Not available'}</strong>
+
+                        </div>
+
+                      ))}
+
+                    </div>
+
+
+
+                    {!localImg && destinationImages.length > 1 && (
+
+                      <div style={{ marginBottom: 16 }}>
+
+                        <strong style={{ display: 'block', fontSize: 12, marginBottom: 8 }}>Gallery Images:</strong>
+
+                        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+
+                          {destinationImages.map((img, i) => (
+
+                            <img
+
+                              key={img.id ?? i}
+
+                              src={img.imageUrl || img.url}
+
+                              alt={img.altText || `${d.name} gallery ${i + 1}`}
+
+                              style={{ width: 100, height: 70, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }}
+
+                            />
+
+                          ))}
+
+                        </div>
+
+                      </div>
+
+                    )}
+
+
+
+                    <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18, flexWrap: 'wrap' }}>
+
+                      <button className="button button-quiet" onClick={() => setDetailModal(false)}>Close</button>
+
+                      <button
+
+                        className="button button-quiet"
+
+                        disabled={!hasCoords}
+
+                        title={hasCoords ? '' : 'No valid coordinates for this destination'}
+
+                        onClick={() => handleViewOnMap(d)}
+
+                      >
+
+                        View on Map
+
+                      </button>
+
+                      <button
+
+                        className="button button-primary"
+
+                        onClick={() => {
+
+                          if (!selectedRouteDestIds.includes(d.id)) {
+
+                            setRoutePlan(null)
+
+                            setSelectedRouteDestIds((prev) => [...prev, d.id])
+
+                          }
+
+                          setDetailModal(false)
+
+                          addToast(`Added ${d.name} to route plan.`)
+
+                        }}
+
+                      >
+
+                        Add to Route Plan
+
+                      </button>
+
+                    </div>
+
+                  </div>
+
+                )
+
+              })()
+
+            )}
+
+          </div>
+
+        </div>
+
+      , document.body)}
+
+    </div>
+
+  )
+
 }

@@ -27,6 +27,11 @@ public class VolunteerEvent extends BaseEntity {
 
     private Boolean active = true;
 
+    // Relative URL of an optional uploaded banner, e.g. /uploads/impact/{uuid}.png.
+    // Nullable: events created before image upload existed simply have none.
+    @Column(length = 255)
+    private String imageUrl;
+
     public VolunteerEvent() {
     }
 
@@ -84,6 +89,14 @@ public class VolunteerEvent extends BaseEntity {
 
     public void setMaxVolunteers(Integer maxVolunteers) {
         this.maxVolunteers = maxVolunteers;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
     }
 
     public Boolean getActive() {

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+  <rect width="800" height="500" fill="#4E8F5C"/>
+  <rect x="0" y="400" width="800" height="100" fill="rgba(0,0,0,0.35)"/>
+  <text x="40" y="465" font-family="Arial, sans-serif" font-size="34" fill="#ffffff" font-weight="bold">Kodaikanal</text>
+  <text x="40" y="60" font-family="Arial, sans-serif" font-size="18" fill="rgba(255,255,255,0.85)">Nature - Placeholder image</text>
+</svg>

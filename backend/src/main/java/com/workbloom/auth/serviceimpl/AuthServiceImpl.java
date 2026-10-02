@@ -6,7 +6,9 @@ import java.util.UUID;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.mail.MailException;
 
+import com.workbloom.auth.service.EmailService;
 import com.workbloom.auth.dto.AuthResponse;
 import com.workbloom.auth.dto.ForgotPasswordRequest;
 import com.workbloom.auth.dto.LoginRequest;
@@ -18,6 +20,11 @@ import com.workbloom.auth.repository.UserRepository;
 import com.workbloom.auth.service.AuthService;
 import com.workbloom.security.JwtService;
 import com.workbloom.auth.dto.ChangePasswordRequest;
+import com.workbloom.exception.BadRequestException;
+import com.workbloom.exception.ConflictException;
+import com.workbloom.exception.ForbiddenException;
+import com.workbloom.exception.ResourceNotFoundException;
+import com.workbloom.exception.UnauthorizedException;
 
 @Service
 public class AuthServiceImpl implements AuthService {
@@ -28,15 +35,19 @@ public class AuthServiceImpl implements AuthService {
 
     private final JwtService jwtService;
 
-    public AuthServiceImpl(
-            UserRepository userRepository,
-            PasswordEncoder passwordEncoder,
-            JwtService jwtService) {
+    private final EmailService emailService;
 
-        this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.jwtService = jwtService;
-    }
+  public AuthServiceImpl(
+        UserRepository userRepository,
+        PasswordEncoder passwordEncoder,
+        JwtService jwtService,
+        EmailService emailService) {
+
+    this.userRepository = userRepository;
+    this.passwordEncoder = passwordEncoder;
+    this.jwtService = jwtService;
+    this.emailService = emailService;
+}
 
     // =========================================================
     // REGISTER
@@ -48,7 +59,7 @@ public class AuthServiceImpl implements AuthService {
         // Check if email already exists
         if (userRepository.existsByEmail(request.getEmail())) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Email already exists."
             );
         }
@@ -122,7 +133,7 @@ public class AuthServiceImpl implements AuthService {
                 userRepository.findByEmail(
                         request.getEmail()
                 ).orElseThrow(
-                        () -> new RuntimeException(
+                        () -> new UnauthorizedException(
                                 "User not found"
                         )
                 );
@@ -132,7 +143,7 @@ public class AuthServiceImpl implements AuthService {
                 request.getPassword(),
                 user.getPassword())) {
 
-            throw new RuntimeException(
+            throw new UnauthorizedException(
                     "Invalid Password"
             );
         }
@@ -141,7 +152,7 @@ public class AuthServiceImpl implements AuthService {
         if (!Boolean.TRUE.equals(
                 user.getEnabled())) {
 
-            throw new RuntimeException(
+            throw new ForbiddenException(
                     "User account is disabled"
             );
         }
@@ -179,48 +190,70 @@ public class AuthServiceImpl implements AuthService {
         return response;
     }
 
-    // =========================================================
-    // FORGOT PASSWORD
-    // =========================================================
-
     @Override
-    public String forgotPassword(
-            ForgotPasswordRequest request) {
+public String forgotPassword(
+        ForgotPasswordRequest request) {
 
-        // Find user by email
-        User user =
-                userRepository.findByEmail(
-                        request.getEmail()
-                ).orElseThrow(
-                        () -> new RuntimeException(
-                                "Email not found"
-                        )
-                );
+    String email = request.getEmail();
 
-        // Generate unique reset token
-        String resetToken =
-                UUID.randomUUID().toString();
+    /*
+     * Always return the same response whether the account
+     * exists or not. This prevents email/account enumeration.
+     */
+    String genericMessage =
+            "If an account matches that email, "
+            + "reset instructions are on their way.";
 
-        // Token valid for 15 minutes
-        LocalDateTime expiry =
-                LocalDateTime.now()
-                        .plusMinutes(15);
+    User user =
+            userRepository.findByEmail(email)
+                    .orElse(null);
 
-        // Save token
-        user.setResetToken(resetToken);
+    if (user == null) {
+        return genericMessage;
+    }
 
-        user.setResetTokenExpiry(expiry);
+    // Generate unique reset token
+    String resetToken =
+            UUID.randomUUID().toString();
 
-        userRepository.save(user);
+    // Token valid for 15 minutes
+    LocalDateTime expiry =
+            LocalDateTime.now()
+                    .plusMinutes(15);
+
+    // Save reset token
+    user.setResetToken(resetToken);
+    user.setResetTokenExpiry(expiry);
+
+    userRepository.save(user);
+
+    try {
+
+        emailService.sendPasswordResetEmail(
+                user.getEmail(),
+                user.getFullName(),
+                resetToken
+        );
+
+    } catch (MailException ex) {
 
         /*
-         * For now we return the token.
-         *
-         * Later this token will be sent through email.
+         * Do not leave an active reset token if the email
+         * could not be sent.
          */
-        return "Password reset token generated: "
-                + resetToken;
+        user.setResetToken(null);
+        user.setResetTokenExpiry(null);
+        userRepository.save(user);
+
+        throw new RuntimeException(
+                "Unable to send password reset email. "
+                + "Please try again later.",
+                ex
+        );
     }
+
+    return genericMessage;
+}
 
     // =========================================================
     // RESET PASSWORD
@@ -237,7 +270,7 @@ public class AuthServiceImpl implements AuthService {
                                 request.getToken()
                         )
                         .orElseThrow(
-                                () -> new RuntimeException(
+                                () -> new UnauthorizedException(
                                         "Invalid reset token"
                                 )
                         );
@@ -249,7 +282,7 @@ public class AuthServiceImpl implements AuthService {
                                 LocalDateTime.now()
                         )) {
 
-            throw new RuntimeException(
+            throw new UnauthorizedException(
                     "Reset token has expired"
             );
         }
@@ -260,7 +293,7 @@ public class AuthServiceImpl implements AuthService {
                         .trim()
                         .isEmpty()) {
 
-            throw new RuntimeException(
+            throw new BadRequestException(
                     "New password cannot be empty"
             );
         }
@@ -301,7 +334,7 @@ public String changePassword(
     User user =
             userRepository.findByEmail(email)
                     .orElseThrow(
-                            () -> new RuntimeException(
+                            () -> new ResourceNotFoundException(
                                     "User not found"
                             )
                     );
@@ -311,7 +344,7 @@ public String changePassword(
             request.getCurrentPassword(),
             user.getPassword())) {
 
-        throw new RuntimeException(
+        throw new UnauthorizedException(
                 "Current password is incorrect"
         );
     }
@@ -322,7 +355,7 @@ public String changePassword(
                     .trim()
                     .isEmpty()) {
 
-        throw new RuntimeException(
+        throw new BadRequestException(
                 "New password cannot be empty"
         );
     }
@@ -332,7 +365,7 @@ public String changePassword(
             request.getNewPassword(),
             user.getPassword())) {
 
-        throw new RuntimeException(
+        throw new BadRequestException(
                 "New password must be different from current password"
         );
     }

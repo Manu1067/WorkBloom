@@ -1,9 +1,14 @@
 package com.workbloom.impact.controller;
 
 import java.util.List;
+import java.util.Map;
 
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.workbloom.common.storage.ImageStorageService;
 
 import com.workbloom.impact.dto.RegistrationRequest;
 import com.workbloom.impact.dto.VolunteerEventRequest;
@@ -16,8 +21,13 @@ public class ImpactController {
 
     private final ImpactService impactService;
 
-    public ImpactController(ImpactService impactService) {
+    private final ImageStorageService imageStorageService;
+
+    public ImpactController(
+            ImpactService impactService,
+            ImageStorageService imageStorageService) {
         this.impactService = impactService;
+        this.imageStorageService = imageStorageService;
     }
 
     // =========================================================
@@ -31,6 +41,25 @@ public class ImpactController {
         return ResponseEntity.ok(
                 impactService.createEvent(request)
         );
+    }
+
+    // =========================================================
+    // UPLOAD ACTIVITY IMAGE (multipart)
+    //
+    // Step 1 of the optional-image flow: the organizer uploads the
+    // photo, receives a relative URL, and sends that URL as `imageUrl`
+    // in POST /events. Restricted to HR/ADMIN in SecurityConfig.
+    // =========================================================
+
+    @PostMapping(
+            value = "/events/image",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, String>> uploadEventImage(
+            @RequestParam("file") MultipartFile file) {
+
+        String url = imageStorageService.storeImage(file, "impact");
+
+        return ResponseEntity.ok(Map.of("imageUrl", url));
     }
 
     // =========================================================

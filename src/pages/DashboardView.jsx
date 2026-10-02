@@ -1,21 +1,34 @@
 import { useState, useEffect } from 'react'
-import { features } from '../api'
+import { dashboardApi } from '../api/dashboardApi'
+import { wellnessApi } from '../api/wellnessApi'
+import { eventApi } from '../api/eventApi'
+import { getEmployeeId } from '../api/apiClient'
 import { useToast } from '../components/ToastContext'
+import { PageHero } from '../components/PageHero'
 
 export function DashboardView({ user, navigate, onUserUpdate }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [moodSaving, setMoodSaving] = useState(false)
   const addToast = useToast()
 
+  const empId = user?.id || user?.employeeId || getEmployeeId()
+
   const loadDashboard = async () => {
+    if (!empId) {
+      setError('Employee identifier missing. Please sign in again.')
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
-      const res = await features.dashboard(user.id)
+      const res = await dashboardApi.getEmployeeDashboard(empId)
       setData(res)
       setError(null)
     } catch (err) {
-      setError(err.message || 'Could not load dashboard data')
+      setError(err.message || 'Could not load dashboard data from backend')
     } finally {
       setLoading(false)
     }
@@ -23,44 +36,42 @@ export function DashboardView({ user, navigate, onUserUpdate }) {
 
   useEffect(() => {
     loadDashboard()
-  }, [user.id])
+  }, [empId])
 
   const handleRsvp = async (eventId, eventTitle) => {
     try {
-      const res = await features.rsvpEvent(eventId)
-      if (res.success) {
-        addToast(
-          res.event.isRegistered
-            ? `Registered for "${eventTitle}"! 🌸`
-            : `RSVP cancelled for "${eventTitle}".`
-        )
-        loadDashboard()
-        if (onUserUpdate) onUserUpdate()
-      }
+      await eventApi.register(eventId, { employeeId: empId })
+      addToast(`Registered for "${eventTitle}"! 🌸`)
+      loadDashboard()
+      if (onUserUpdate) onUserUpdate()
     } catch (err) {
-      addToast(err.message, 'error')
+      addToast(err.message || 'RSVP failed', 'error')
     }
   }
 
-  const handleMoodCheck = async (mood) => {
+  const handleQuickMoodCheck = async (mood) => {
     try {
-      const res = await features.recordMood(user.id, { mood })
-      if (res.success) {
-        addToast(`Recorded mood: ${mood} · Stress ${res.stress}/10 · Energy ${res.energy}/10`)
-        loadDashboard()
-        if (onUserUpdate) onUserUpdate()
-      }
+      setMoodSaving(true)
+      await wellnessApi.recordMood(empId, { mood, note: 'Quick dashboard check-in' })
+      addToast(`Recorded mood: ${mood} 🌿`)
+      await loadDashboard()
+      if (onUserUpdate) onUserUpdate()
     } catch (err) {
-      addToast(err.message, 'error')
+      addToast(err.message || 'Could not save mood', 'error')
+    } finally {
+      setMoodSaving(false)
     }
   }
 
   if (loading && !data) {
     return (
-      <div className="content">
-        <div className="loading-grid">
-          <div className="skeleton" style={{ height: 260 }} />
-          <div className="skeleton" style={{ height: 260 }} />
+      <div className="content page-shell">
+        <div className="loading-grid" style={{ display: 'grid', gap: 20 }}>
+          <div className="skeleton" style={{ height: 220, borderRadius: 16 }} />
+          <div className="section-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+            <div className="skeleton" style={{ height: 260, borderRadius: 16 }} />
+            <div className="skeleton" style={{ height: 260, borderRadius: 16 }} />
+          </div>
         </div>
       </div>
     )
@@ -68,37 +79,48 @@ export function DashboardView({ user, navigate, onUserUpdate }) {
 
   if (error && !data) {
     return (
-      <div className="content">
-        <div className="alert">{error}</div>
-        <button className="button button-quiet" onClick={loadDashboard}>Retry</button>
+      <div className="content page-shell">
+        <div className="alert" style={{ background: 'hsl(var(--coral-soft) / 0.4)', padding: 18, borderRadius: 12, border: '1px solid hsl(var(--coral))' }}>
+          <strong>Dashboard Connection Issue</strong>
+          <p style={{ margin: '4px 0 12px', fontSize: 13 }}>{error}</p>
+          <button className="button button-quiet" onClick={loadDashboard}>Retry Connection</button>
+        </div>
       </div>
     )
   }
 
-  const moodScore = Math.round(((data?.latestEnergyLevel || 7) / 10) * 100)
+  const firstName = data?.fullName ? data.fullName.split(' ')[0] : (user?.fullName?.split(' ')[0] || 'Friend')
   const events = data?.upcomingEvents || []
+  const notifications = data?.unreadNotifications || []
 
   return (
     <div className="content page-shell">
-      <div className="dashboard-grid">
-        <section className="card hero-card">
-          <p className="eyebrow" style={{ color: 'hsl(var(--sage-dark))' }}>
-            Welcome home · {data?.department || 'WorkBloom'}
+      <PageHero page="dashboard" />
+      {/* Hero Welcome Card: Emotional Home */}
+      <div className="dashboard-grid" style={{ marginBottom: 24 }}>
+        <section className="card hero-card" style={{ padding: 28, background: 'linear-gradient(135deg, hsl(var(--paper)), hsl(var(--sage-soft) / 0.3))' }}>
+          <p className="eyebrow" style={{ color: 'hsl(var(--sage-dark))', fontWeight: 600 }}>
+            Make Work Feel Like Home · {data?.department || user?.department || 'WorkBloom'}
           </p>
-          <h1>Hello, {data?.fullName?.split(' ')[0] || 'Friend'}.</h1>
-          <p className="subtitle">
-            Take a slow breath. Your workday is a space for steady focus, mutual appreciation, and mindful pacing.
+          <h1 style={{ fontSize: 32, marginBottom: 8 }}>Hello, {firstName}.</h1>
+          <p className="subtitle" style={{ maxWidth: 620, color: 'hsl(var(--ink) / 0.85)', lineHeight: 1.6 }}>
+            Welcome to your personal sanctuary. WorkBloom is designed for steady focus, mutual appreciation, and mindful pacing.
           </p>
-          <div className="hero-meta">
-            <span>✨ {data?.recognitionReceivedCount || 0} recognitions</span>
+
+          <div className="hero-meta" style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 16, fontSize: 13, color: 'hsl(var(--sage-dark))', fontWeight: 600 }}>
+            <span>✨ {data?.recognitionReceivedCount ?? 0} recognitions received</span>
             <span>·</span>
-            <span>🌿 {data?.clubs?.activeMembershipCount || 0} active circles</span>
+            <span>💬 {data?.communityPostCount ?? 0} community posts</span>
             <span>·</span>
-            <span>🌱 {data?.impact?.hoursContributed || 0} hrs impact contributed</span>
+            <span>🔔 {data?.unreadNotificationCount ?? 0} unread updates</span>
           </div>
-          <div style={{ marginTop: 22, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+
+          <div style={{ marginTop: 22, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <button className="button button-primary" onClick={() => navigate('/wellness')}>
               Daily rhythm check-in
+            </button>
+            <button className="button button-quiet" onClick={() => navigate('/travel')}>
+              🗺️ Find travel havens
             </button>
             <button className="button button-quiet" onClick={() => navigate('/recognition')}>
               Celebrate a colleague
@@ -106,199 +128,165 @@ export function DashboardView({ user, navigate, onUserUpdate }) {
           </div>
         </section>
 
-        <section className="card daily-card">
-          <p className="eyebrow" style={{ color: 'hsl(var(--gold))' }}>Quiet prompt</p>
-          <h3>One intentional pause.</h3>
-          <p>
-            “Protecting your energy today creates the space to do meaningful, compassionate work tomorrow.”
+        {/* Quiet Prompt / Mood Check-in */}
+        <section className="card daily-card" style={{ padding: 24, background: 'hsl(var(--paper-warm))', border: '1px solid hsl(var(--gold) / 0.3)' }}>
+          <p className="eyebrow" style={{ color: 'hsl(var(--gold))', fontWeight: 700 }}>Mindful pause</p>
+          <h3 style={{ fontSize: 18, marginTop: 4 }}>How are you feeling right now?</h3>
+          <p style={{ fontSize: 12, color: 'hsl(var(--muted))', lineHeight: 1.4, margin: '4px 0 14px' }}>
+            “Protecting your energy today creates the space for meaningful, compassionate work tomorrow.”
           </p>
-          <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 11, color: 'hsl(43 28% 85%)', marginBottom: 8 }}>Quick mood log:</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {['Steady', 'Bright', 'Tired', 'Full'].map((m) => (
-                <button
-                  key={m}
-                  onClick={() => handleMoodCheck(m)}
-                  className="button button-quiet"
-                  style={{
-                    padding: '4px 9px',
-                    fontSize: 11,
-                    background: data?.latestMood === m ? 'hsl(var(--gold))' : 'hsl(var(--paper) / 0.15)',
-                    color: data?.latestMood === m ? 'hsl(var(--ink))' : 'hsl(43 46% 96%)',
-                    borderColor: 'hsl(var(--gold) / 0.3)',
-                  }}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-            <div style={{ marginTop: 10, fontSize: 11 }}>
+
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+            {['Steady', 'Bright', 'Tired', 'Full'].map((m) => (
               <button
-                type="button"
-                className="text-link"
-                style={{ color: 'hsl(var(--gold))', fontSize: 11 }}
-                onClick={() => navigate('/travel')}
+                key={m}
+                disabled={moodSaving}
+                onClick={() => handleQuickMoodCheck(m)}
+                className="button button-quiet"
+                style={{
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  background: data?.latestMood === m ? 'hsl(var(--sage-dark))' : 'hsl(var(--paper))',
+                  color: data?.latestMood === m ? '#ffffff' : 'hsl(var(--ink))',
+                  borderColor: data?.latestMood === m ? 'hsl(var(--sage-dark))' : 'hsl(var(--line))',
+                  fontWeight: data?.latestMood === m ? 700 : 500,
+                }}
               >
-                🗺️ Find restorative havens matched to your mood →
+                {m}
               </button>
-            </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid hsl(var(--line) / 0.5)' }}>
+            <button
+              type="button"
+              className="text-link"
+              style={{ color: 'hsl(var(--sage-dark))', fontSize: 12, fontWeight: 600 }}
+              onClick={() => navigate('/travel')}
+            >
+              🗺️ Explore havens matched to your state →
+            </button>
           </div>
         </section>
       </div>
 
-      <div className="section-grid">
+      {/* Main Section Grid: Events & Wellness Rhythm */}
+      <div className="section-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20, marginBottom: 24 }}>
+        {/* Upcoming Gatherings */}
         <section className="card card-pad">
-          <div className="card-header">
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div>
-              <h2 className="card-title">Gatherings & pauses</h2>
-              <p className="card-caption">Upcoming spaces to breathe, learn, and reconnect</p>
+              <h2 className="card-title" style={{ margin: 0, fontSize: 18 }}>Gatherings & pauses</h2>
+              <p className="card-caption" style={{ margin: '2px 0 0', fontSize: 12, color: 'hsl(var(--muted))' }}>
+                Upcoming spaces to breathe and reconnect
+              </p>
             </div>
-            <button className="text-link" onClick={() => navigate('/events')}>
+            <button className="text-link" style={{ fontSize: 12 }} onClick={() => navigate('/events')}>
               All events →
             </button>
           </div>
 
-          <div className="event-list">
-            {events.slice(0, 3).map((event) => {
-              const isRegistered = event.attendees?.includes(user.id)
-              const d = new Date(event.startDate)
-              const day = d.getDate()
-              const month = d.toLocaleString('en-US', { month: 'short' })
+          <div className="event-list" style={{ display: 'grid', gap: 12 }}>
+            {events.length === 0 ? (
+              <div className="empty-state" style={{ padding: 20, textAlign: 'center', color: 'hsl(var(--muted))', fontSize: 13 }}>
+                No upcoming events scheduled right now.
+              </div>
+            ) : (
+              events.slice(0, 3).map((evt) => {
+                const d = evt.startDate ? new Date(evt.startDate) : null
+                const day = d ? d.getDate() : '--'
+                const month = d ? d.toLocaleString('en-US', { month: 'short' }) : ''
 
-              return (
-                <div key={event.id} className="event-item">
-                  <div className="event-date">
-                    <strong>{day}</strong>
-                    <span>{month}</span>
+                return (
+                  <div key={evt.id || evt.title} className="event-item" style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 12, borderRadius: 10, background: 'hsl(var(--canvas) / 0.5)', border: '1px solid hsl(var(--line) / 0.6)' }}>
+                    <div className="event-date" style={{ textAlign: 'center', background: 'hsl(var(--sage-soft))', padding: '6px 12px', borderRadius: 8, color: 'hsl(var(--sage-dark))' }}>
+                      <strong style={{ display: 'block', fontSize: 16 }}>{day}</strong>
+                      <span style={{ fontSize: 10, textTransform: 'uppercase' }}>{month}</span>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <h3 className="event-name" style={{ margin: 0, fontSize: 14 }}>{evt.title}</h3>
+                      <p className="event-info" style={{ margin: '2px 0 0', fontSize: 11, color: 'hsl(var(--muted))' }}>
+                        {evt.location || 'Online'} · {evt.eventType || 'Workshop'}
+                      </p>
+                    </div>
+                    <button
+                      className="button button-primary"
+                      style={{ padding: '6px 12px', fontSize: 11 }}
+                      onClick={() => handleRsvp(evt.id, evt.title)}
+                    >
+                      RSVP
+                    </button>
                   </div>
-                  <div>
-                    <h3 className="event-name">{event.title}</h3>
-                    <p className="event-info">{event.location} · {event.eventType}</p>
-                  </div>
-                  <button
-                    className={`button ${isRegistered ? 'button-quiet' : 'button-primary'}`}
-                    style={{ padding: '6px 12px', fontSize: 11 }}
-                    onClick={() => handleRsvp(event.id, event.title)}
-                  >
-                    {isRegistered ? 'Registered ✓' : 'RSVP'}
-                  </button>
-                </div>
-              )
-            })}
+                )
+              })
+            )}
           </div>
         </section>
 
+        {/* Wellbeing Snapshot */}
         <section className="card card-pad">
-          <div className="card-header">
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div>
-              <h2 className="card-title">Wellbeing rhythm</h2>
-              <p className="card-caption">Personal balance based on your check-ins</p>
+              <h2 className="card-title" style={{ margin: 0, fontSize: 18 }}>Wellbeing rhythm</h2>
+              <p className="card-caption" style={{ margin: '2px 0 0', fontSize: 12, color: 'hsl(var(--muted))' }}>
+                Latest status from backend check-ins
+              </p>
             </div>
-            <button className="text-link" onClick={() => navigate('/wellness')}>
+            <button className="text-link" style={{ fontSize: 12 }} onClick={() => navigate('/wellness')}>
               Sanctuary →
             </button>
           </div>
 
-          <div className="mood-wrap">
-            <div className="mood-ring">
-              <strong>{moodScore}%</strong>
+          <div className="mood-wrap" style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 18, padding: 14, borderRadius: 12, background: 'hsl(var(--paper-warm))' }}>
+            <div className="mood-ring" style={{ width: 56, height: 56, borderRadius: '50%', background: 'hsl(var(--sage-dark))', color: '#ffffff', display: 'grid', placeItems: 'center', fontSize: 20 }}>
+              🌿
             </div>
             <div className="mood-copy">
-              <strong>{data?.latestMood || 'Steady'} State</strong>
-              <span>
-                Energy is at {data?.latestEnergyLevel || 8}/10 with mild stress ({data?.latestStressLevel || 3}/10).
+              <strong style={{ display: 'block', fontSize: 16 }}>{data?.latestMood || 'Steady'} State</strong>
+              <span style={{ fontSize: 12, color: 'hsl(var(--muted))' }}>
+                Energy: {data?.latestEnergyLevel ?? '--'}/10 · Stress: {data?.latestStressLevel ?? '--'}/10
               </span>
             </div>
           </div>
 
-          <div className="bar-list">
-            <div className="bar-line">
-              <span>Energy</span>
-              <div className="bar-track">
-                <div className="bar-fill" style={{ width: `${(data?.latestEnergyLevel || 8) * 10}%` }} />
+          <div className="bar-list" style={{ display: 'grid', gap: 12 }}>
+            <div className="bar-line" style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
+              <span style={{ width: 60, color: 'hsl(var(--muted))' }}>Energy</span>
+              <div className="bar-track" style={{ flex: 1, height: 8, background: 'hsl(var(--line))', borderRadius: 4, overflow: 'hidden' }}>
+                <div className="bar-fill" style={{ width: `${(data?.latestEnergyLevel || 5) * 10}%`, height: '100%', background: 'hsl(var(--sage))', borderRadius: 4 }} />
               </div>
-              <b>{data?.latestEnergyLevel || 8}/10</b>
+              <b style={{ width: 40, textAlign: 'right' }}>{data?.latestEnergyLevel ?? '--'}/10</b>
             </div>
-            <div className="bar-line">
-              <span>Stress</span>
-              <div className="bar-track">
-                <div
-                  className="bar-fill"
-                  style={{
-                    width: `${(data?.latestStressLevel || 3) * 10}%`,
-                    background: 'hsl(var(--coral))',
-                  }}
-                />
+
+            <div className="bar-line" style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
+              <span style={{ width: 60, color: 'hsl(var(--muted))' }}>Stress</span>
+              <div className="bar-track" style={{ flex: 1, height: 8, background: 'hsl(var(--line))', borderRadius: 4, overflow: 'hidden' }}>
+                <div className="bar-fill" style={{ width: `${(data?.latestStressLevel || 3) * 10}%`, height: '100%', background: 'hsl(var(--coral))', borderRadius: 4 }} />
               </div>
-              <b>{data?.latestStressLevel || 3}/10</b>
+              <b style={{ width: 40, textAlign: 'right' }}>{data?.latestStressLevel ?? '--'}/10</b>
             </div>
           </div>
         </section>
       </div>
 
-      <div className="lower-grid">
-        <div className="card card-pad mini-card">
-          <div className="mini-icon sage">🤝</div>
-          <h3 style={{ fontSize: 16 }}>Wellbeing buddy</h3>
-          {data?.buddy?.activeBuddy ? (
-            <div>
-              <p style={{ margin: '0 0 8px', fontSize: 12 }}>
-                Paired with <strong>{data.buddy.activeBuddy.fullName}</strong> ({data.buddy.activeBuddy.department})
-              </p>
-              <button
-                className="button button-quiet"
-                style={{ fontSize: 11, padding: '5px 10px' }}
-                onClick={() => navigate('/chat')}
-              >
-                Send gentle ping
-              </button>
-            </div>
-          ) : (
-            <div>
-              <p style={{ margin: '0 0 8px', fontSize: 12 }}>
-                You have {data?.buddy?.pendingRequestCount || 0} buddy invitations.
-              </p>
-              <button
-                className="button button-primary"
-                style={{ fontSize: 11, padding: '5px 10px' }}
-                onClick={() => navigate('/buddy')}
-              >
-                Find a buddy
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="card card-pad mini-card">
-          <div className="mini-icon gold">📖</div>
-          <h3 style={{ fontSize: 16 }}>Gentle learning</h3>
-          <p style={{ margin: '0 0 8px', fontSize: 12 }}>
-            {data?.learning?.inProgressCount || 0} in progress · {data?.learning?.completedCount || 0} completed
+      {/* Lower Notifications & Quick Actions Section */}
+      <section className="card card-pad">
+        <h2 className="card-title" style={{ margin: '0 0 12px', fontSize: 18 }}>Recent notifications</h2>
+        {notifications.length === 0 ? (
+          <p style={{ margin: 0, fontSize: 13, color: 'hsl(var(--muted))', fontStyle: 'italic' }}>
+            Your notification feed is clear and quiet. Enjoy your workday! 🌸
           </p>
-          <button
-            className="button button-quiet"
-            style={{ fontSize: 11, padding: '5px 10px' }}
-            onClick={() => navigate('/learning')}
-          >
-            Continue learning
-          </button>
-        </div>
-
-        <div className="card card-pad mini-card">
-          <div className="mini-icon coral">🌸</div>
-          <h3 style={{ fontSize: 16 }}>Peer appreciation</h3>
-          <p style={{ margin: '0 0 8px', fontSize: 12 }}>
-            {data?.recognitionReceivedCount || 0} appreciation notes received
-          </p>
-          <button
-            className="button button-quiet"
-            style={{ fontSize: 11, padding: '5px 10px' }}
-            onClick={() => navigate('/recognition')}
-          >
-            View appreciation wall
-          </button>
-        </div>
-      </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 8 }}>
+            {notifications.slice(0, 4).map((n) => (
+              <div key={n.id || n.title} style={{ padding: '10px 12px', borderRadius: 8, background: 'hsl(var(--canvas) / 0.4)', fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
+                <span>{n.title || n.message}</span>
+                <span style={{ fontSize: 11, color: 'hsl(var(--muted))' }}>{n.type}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   )
 }

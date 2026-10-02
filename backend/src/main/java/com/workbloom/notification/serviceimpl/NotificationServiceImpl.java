@@ -14,6 +14,8 @@ import com.workbloom.notification.entity.Notification;
 import com.workbloom.notification.entity.NotificationType;
 import com.workbloom.notification.repository.NotificationRepository;
 import com.workbloom.notification.service.NotificationService;
+import com.workbloom.exception.BadRequestException;
+import com.workbloom.exception.ResourceNotFoundException;
 
 @Service
 @Transactional
@@ -42,7 +44,7 @@ public class NotificationServiceImpl implements NotificationService {
                 employeeRepository.findById(
                         request.getEmployeeId())
                         .orElseThrow(
-                                () -> new RuntimeException(
+                                () -> new ResourceNotFoundException(
                                         "Employee not found"
                                 )
                         );
@@ -50,7 +52,7 @@ public class NotificationServiceImpl implements NotificationService {
         if (request.getTitle() == null
                 || request.getTitle().trim().isEmpty()) {
 
-            throw new RuntimeException(
+            throw new BadRequestException(
                     "Notification title is required"
             );
         }
@@ -136,7 +138,7 @@ public class NotificationServiceImpl implements NotificationService {
         Notification notification =
                 notificationRepository.findById(notificationId)
                         .orElseThrow(
-                                () -> new RuntimeException(
+                                () -> new ResourceNotFoundException(
                                         "Notification not found"
                                 )
                         );
@@ -185,7 +187,7 @@ public class NotificationServiceImpl implements NotificationService {
 
         if (!notificationRepository.existsById(notificationId)) {
 
-            throw new RuntimeException(
+            throw new ResourceNotFoundException(
                     "Notification not found"
             );
         }

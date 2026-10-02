@@ -105,29 +105,38 @@
         <!-- TESTING -->
         <!-- ============================== -->
 
+        <!--
+            NOTE (Phase 1 IDOR fix): the four dependencies previously
+            declared here (spring-boot-starter-data-jpa-test,
+            spring-boot-starter-security-test,
+            spring-boot-starter-validation-test,
+            spring-boot-starter-webmvc-test) are not real Maven Central
+            artifacts, so `mvn test` could not resolve dependencies at
+            all. Replaced with the two real artifacts that provide the
+            same coverage (JUnit 5, Mockito, AssertJ, MockMvc via
+            spring-boot-starter-test; @WithMockUser / Spring Security
+            test support via spring-security-test).
+        -->
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-jpa-test</artifactId>
+            <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
 
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security-test</artifactId>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- ============================== -->
+<!-- EMAIL -->
+<!-- ============================== -->
 
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-validation-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webmvc-test</artifactId>
-            <scope>test</scope>
-        </dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-mail</artifactId>
+</dependency>
 
     </dependencies>
 

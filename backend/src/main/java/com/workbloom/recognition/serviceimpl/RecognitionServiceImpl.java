@@ -23,6 +23,9 @@ import com.workbloom.recognition.service.RecognitionService;
 import com.workbloom.recognition.dto.BadgeRequest;
 import com.workbloom.recognition.entity.Badge;
 import com.workbloom.recognition.repository.BadgeRepository;
+import com.workbloom.exception.BadRequestException;
+import com.workbloom.exception.ForbiddenException;
+import com.workbloom.exception.ResourceNotFoundException;
 @Service
 @Transactional
 public class RecognitionServiceImpl implements RecognitionService {
@@ -75,7 +78,7 @@ public List<Badge> getAllBadges() {
         Employee author =
                 employeeRepository.findById(authorId)
                         .orElseThrow(() ->
-                                new RuntimeException(
+                                new ResourceNotFoundException(
                                         "Author not found with ID: "
                                                 + authorId
                                 ));
@@ -88,7 +91,7 @@ public List<Badge> getAllBadges() {
                     employeeRepository.findById(
                             request.getEmployeeId()
                     ).orElseThrow(() ->
-                            new RuntimeException(
+                            new ResourceNotFoundException(
                                     "Employee not found with ID: "
                                             + request.getEmployeeId()
                             ));
@@ -174,7 +177,7 @@ public List<Badge> getAllBadges() {
                 recognitionRepository.findById(
                         recognitionId
                 ).orElseThrow(() ->
-                        new RuntimeException(
+                        new ResourceNotFoundException(
                                 "Recognition not found with ID: "
                                         + recognitionId
                         ));
@@ -183,7 +186,7 @@ public List<Badge> getAllBadges() {
                 employeeRepository.findById(
                         employeeId
                 ).orElseThrow(() ->
-                        new RuntimeException(
+                        new ResourceNotFoundException(
                                 "Employee not found with ID: "
                                         + employeeId
                         ));
@@ -235,7 +238,7 @@ public List<Badge> getAllBadges() {
                 recognitionRepository.findById(
                         recognitionId
                 ).orElseThrow(() ->
-                        new RuntimeException(
+                        new ResourceNotFoundException(
                                 "Recognition not found with ID: "
                                         + recognitionId
                         ));
@@ -261,7 +264,7 @@ public List<Badge> getAllBadges() {
                 recognitionRepository.findById(
                         recognitionId
                 ).orElseThrow(() ->
-                        new RuntimeException(
+                        new ResourceNotFoundException(
                                 "Recognition not found with ID: "
                                         + recognitionId
                         ));
@@ -270,7 +273,7 @@ public List<Badge> getAllBadges() {
                 employeeRepository.findById(
                         employeeId
                 ).orElseThrow(() ->
-                        new RuntimeException(
+                        new ResourceNotFoundException(
                                 "Employee not found with ID: "
                                         + employeeId
                         ));
@@ -278,7 +281,7 @@ public List<Badge> getAllBadges() {
         if (request.getContent() == null
                 || request.getContent().isBlank()) {
 
-            throw new RuntimeException(
+            throw new BadRequestException(
                     "Comment cannot be empty"
             );
         }
@@ -317,7 +320,7 @@ public List<Badge> getAllBadges() {
         recognitionRepository.findById(
                 recognitionId
         ).orElseThrow(() ->
-                new RuntimeException(
+                new ResourceNotFoundException(
                         "Recognition not found with ID: "
                                 + recognitionId
                 ));
@@ -344,7 +347,7 @@ public List<Badge> getAllBadges() {
                 commentRepository.findById(
                         commentId
                 ).orElseThrow(() ->
-                        new RuntimeException(
+                        new ResourceNotFoundException(
                                 "Comment not found with ID: "
                                         + commentId
                         ));
@@ -353,7 +356,7 @@ public List<Badge> getAllBadges() {
                 .getId()
                 .equals(employeeId)) {
 
-            throw new RuntimeException(
+            throw new ForbiddenException(
                     "You can only delete your own comment"
             );
         }

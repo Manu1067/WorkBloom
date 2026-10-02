@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -20,6 +22,8 @@ import jakarta.servlet.http.HttpServletResponse;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
@@ -41,15 +45,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String authHeader = request.getHeader("Authorization");
 
-        System.out.println("======================================");
-        System.out.println("JWT FILTER");
-        System.out.println("Request: " + request.getMethod()
-                + " " + request.getRequestURI());
+        log.debug("JWT filter: {} {}", request.getMethod(), request.getRequestURI());
 
         // No Authorization header
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
 
-            System.out.println("No Bearer token found.");
+            log.trace("No Bearer token found for {} {}", request.getMethod(), request.getRequestURI());
 
             filterChain.doFilter(request, response);
             return;
@@ -63,8 +64,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // Extract email from JWT
             String email = jwtService.extractEmail(token);
 
-            System.out.println("Email from JWT: " + email);
-
             if (email != null &&
                     SecurityContextHolder.getContext()
                             .getAuthentication() == null) {
@@ -74,23 +73,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 if (user == null) {
 
-                    System.out.println("USER NOT FOUND");
+                    // Deliberately not logging the email at a level that
+                    // ends up in default prod logs - avoids leaking which
+                    // addresses are (or aren't) registered accounts.
+                    log.debug("JWT presented a token for an unknown account");
 
                 } else {
 
-                    System.out.println("User found: "
-                            + user.getEmail());
-
-                    System.out.println("Database role: "
-                            + user.getRole());
-
-                    System.out.println("Enabled: "
-                            + user.getEnabled());
-
                     boolean valid =
                             jwtService.isTokenValid(token, email);
-
-                    System.out.println("JWT valid: " + valid);
 
                     if (valid && Boolean.TRUE.equals(user.getEnabled())) {
 
@@ -106,10 +97,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                             authorities = Collections.emptyList();
                         }
-
-                        System.out.println(
-                                "Authorities: " + authorities
-                        );
 
                         UsernamePasswordAuthenticationToken authentication =
                                 new UsernamePasswordAuthenticationToken(
@@ -132,34 +119,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                 .getContext()
                                 .setAuthentication(authentication);
 
-                        System.out.println(
-                                "AUTHENTICATION SET SUCCESSFULLY"
-                        );
+                        log.debug("Authenticated request as {} with authorities {}",
+                                user.getEmail(), authorities);
 
                     } else {
 
-                        System.out.println(
-                                "JWT INVALID OR USER DISABLED"
-                        );
+                        log.debug("JWT rejected: valid={}, accountEnabled={}",
+                                valid, user.getEnabled());
                     }
                 }
             }
 
         } catch (Exception e) {
 
-            System.out.println("JWT ERROR: "
-                    + e.getClass().getSimpleName());
-
-            System.out.println("JWT ERROR MESSAGE: "
-                    + e.getMessage());
-
+            log.warn("JWT processing failed: {}: {}",
+                    e.getClass().getSimpleName(), e.getMessage());
         }
-
-        System.out.println("Authentication at end of filter: "
-                + SecurityContextHolder.getContext()
-                        .getAuthentication());
-
-        System.out.println("======================================");
 
         filterChain.doFilter(request, response);
     }

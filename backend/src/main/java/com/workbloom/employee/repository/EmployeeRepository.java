@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import com.workbloom.employee.entity.Employee;
+import com.workbloom.employee.entity.EmployeeStatus;
 
 @Repository
 public interface EmployeeRepository
@@ -18,4 +19,7 @@ public interface EmployeeRepository
     boolean existsByEmail(String email);
 
     boolean existsByEmployeeCode(String employeeCode);
+
+    // Added for Analytics (Task 4) - simple aggregate count, no new logic.
+    long countByStatus(EmployeeStatus status);
 }

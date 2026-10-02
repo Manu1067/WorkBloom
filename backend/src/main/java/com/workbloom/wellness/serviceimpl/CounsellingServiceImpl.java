@@ -15,6 +15,9 @@ import com.workbloom.wellness.entity.CounsellingAppointment;
 import com.workbloom.wellness.entity.CounsellingStatus;
 import com.workbloom.wellness.repository.CounsellingAppointmentRepository;
 import com.workbloom.wellness.service.CounsellingService;
+import com.workbloom.exception.ConflictException;
+import com.workbloom.exception.ForbiddenException;
+import com.workbloom.exception.ResourceNotFoundException;
 
 @Service
 @Transactional
@@ -42,7 +45,7 @@ public class CounsellingServiceImpl implements CounsellingService {
 
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() ->
-                        new RuntimeException("Employee not found"));
+                        new ResourceNotFoundException("Employee not found"));
 
         CounsellingAppointment appointment =
                 new CounsellingAppointment();
@@ -115,7 +118,7 @@ public class CounsellingServiceImpl implements CounsellingService {
         if (appointment.getStatus()
                 != CounsellingStatus.PENDING) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Only pending appointments can be approved"
             );
         }
@@ -142,7 +145,7 @@ public class CounsellingServiceImpl implements CounsellingService {
         if (appointment.getStatus()
                 != CounsellingStatus.PENDING) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Only pending appointments can be rejected"
             );
         }
@@ -174,7 +177,7 @@ public class CounsellingServiceImpl implements CounsellingService {
                 .getId()
                 .equals(employeeId)) {
 
-            throw new RuntimeException(
+            throw new ForbiddenException(
                     "You can cancel only your own appointment"
             );
         }
@@ -184,7 +187,7 @@ public class CounsellingServiceImpl implements CounsellingService {
             appointment.getStatus()
                 != CounsellingStatus.APPROVED) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "This appointment cannot be cancelled"
             );
         }
@@ -210,7 +213,7 @@ public class CounsellingServiceImpl implements CounsellingService {
         if (appointment.getStatus()
                 != CounsellingStatus.APPROVED) {
 
-            throw new RuntimeException(
+            throw new ConflictException(
                     "Only approved appointments can be completed"
             );
         }
@@ -231,7 +234,7 @@ public class CounsellingServiceImpl implements CounsellingService {
 
         return counsellingRepository.findById(id)
                 .orElseThrow(() ->
-                        new RuntimeException(
+                        new ResourceNotFoundException(
                                 "Counselling appointment not found"
                         ));
     }

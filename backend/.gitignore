@@ -4,6 +4,13 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+### Local secrets (Phase 1 secrets fix) ###
+# Real env files may contain DB_PASSWORD / JWT_SECRET - never commit them.
+# .env.example (placeholders only) stays tracked.
+.env
+.env.*
+!.env.example
+
 ### STS ###
 .apt_generated
 .classpath
@@ -31,3 +38,10 @@ build/
 
 ### VS Code ###
 .vscode/
+# Node
+node_modules/
+
+# Generated backend files
+backend/bin/
+# Local image uploads (Impact activity banners)
+uploads/

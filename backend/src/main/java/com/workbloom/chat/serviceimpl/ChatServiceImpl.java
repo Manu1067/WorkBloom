@@ -24,6 +24,9 @@ import com.workbloom.chat.repository.ConversationRepository;
 import com.workbloom.chat.service.ChatService;
 import com.workbloom.employee.entity.Employee;
 import com.workbloom.employee.repository.EmployeeRepository;
+import com.workbloom.exception.BadRequestException;
+import com.workbloom.exception.ForbiddenException;
+import com.workbloom.exception.ResourceNotFoundException;
 
 @Service
 @Transactional
@@ -60,7 +63,7 @@ public class ChatServiceImpl implements ChatService {
         }
 
         if (participantIds.size() < 2) {
-            throw new RuntimeException(
+            throw new BadRequestException(
                     "A conversation needs at least two employees");
         }
 
@@ -145,7 +148,7 @@ public class ChatServiceImpl implements ChatService {
 
         if (request == null || request.getContent() == null
                 || request.getContent().isBlank()) {
-            throw new RuntimeException("Message content is required");
+            throw new BadRequestException("Message content is required");
         }
 
         ChatMessage message = new ChatMessage();
@@ -210,7 +213,7 @@ public class ChatServiceImpl implements ChatService {
                 conversationRepository
                         .findByIdAndActiveTrue(conversationId)
                         .orElseThrow(() ->
-                                new RuntimeException(
+                                new ResourceNotFoundException(
                                         "Conversation not found"));
 
         findParticipant(conversationId, employeeId);
@@ -227,14 +230,14 @@ public class ChatServiceImpl implements ChatService {
                         employeeId
                 )
                 .orElseThrow(() ->
-                        new RuntimeException(
+                        new ForbiddenException(
                                 "Employee is not a participant in this conversation"));
     }
 
     private Employee findEmployee(Long employeeId) {
         return employeeRepository.findById(employeeId)
                 .orElseThrow(() ->
-                        new RuntimeException("Employee not found"));
+                        new ResourceNotFoundException("Employee not found"));
     }
 
     private ConversationResponse toResponse(
