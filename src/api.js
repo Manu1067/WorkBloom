@@ -38,7 +38,7 @@ export const employees = {
 };
 
 export const features = {
-  dashboard: (employeeId) => apiClient.get(`/dashboard/employee/${employeeId}`),
+  dashboard: () => apiClient.get('/dashboard/employee/me'),
   health: () => Promise.resolve({ status: 'UP' }),
 
   // Events

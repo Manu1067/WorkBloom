@@ -14,6 +14,13 @@ public interface EmployeeRepository
                 JpaSpecificationExecutor<Employee> {
     Optional<Employee> findByEmail(String email);
 
+    // Case-insensitive lookup - the bridge between the authenticated
+    // User (JWT subject = email) and the Employee profile. Never use
+    // User.id as an Employee id: they are separate ID sequences.
+    Optional<Employee> findByEmailIgnoreCase(String email);
+
+    boolean existsByEmailIgnoreCase(String email);
+
     Optional<Employee> findByEmployeeCode(String employeeCode);
 
     boolean existsByEmail(String email);

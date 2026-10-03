@@ -24,7 +24,7 @@ export function DashboardView({ user, navigate, onUserUpdate }) {
 
     try {
       setLoading(true)
-      const res = await dashboardApi.getEmployeeDashboard(empId)
+      const res = await dashboardApi.getMyDashboard()
       setData(res)
       setError(null)
     } catch (err) {

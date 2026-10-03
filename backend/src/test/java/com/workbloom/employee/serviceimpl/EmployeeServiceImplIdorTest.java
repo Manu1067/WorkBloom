@@ -83,7 +83,7 @@ class EmployeeServiceImplIdorTest {
     void employeeCanViewOwnProfile() {
         authenticateAs(OWN_EMAIL, "EMPLOYEE");
 
-        when(employeeRepository.findByEmail(OWN_EMAIL))
+        when(employeeRepository.findByEmailIgnoreCase(OWN_EMAIL))
                 .thenReturn(Optional.of(employeeWithId(OWN_ID)));
         when(employeeRepository.findById(OWN_ID))
                 .thenReturn(Optional.of(employeeWithId(OWN_ID)));
@@ -97,7 +97,7 @@ class EmployeeServiceImplIdorTest {
     void employeeCannotViewAnotherEmployeesProfile() {
         authenticateAs(OWN_EMAIL, "EMPLOYEE");
 
-        when(employeeRepository.findByEmail(OWN_EMAIL))
+        when(employeeRepository.findByEmailIgnoreCase(OWN_EMAIL))
                 .thenReturn(Optional.of(employeeWithId(OWN_ID)));
 
         assertThatThrownBy(() -> employeeService.getEmployeeById(OTHER_ID))
@@ -112,7 +112,7 @@ class EmployeeServiceImplIdorTest {
     void employeeCanUpdateOwnProfile() {
         authenticateAs(OWN_EMAIL, "EMPLOYEE");
 
-        when(employeeRepository.findByEmail(OWN_EMAIL))
+        when(employeeRepository.findByEmailIgnoreCase(OWN_EMAIL))
                 .thenReturn(Optional.of(employeeWithId(OWN_ID)));
         when(employeeRepository.findById(OWN_ID))
                 .thenReturn(Optional.of(employeeWithId(OWN_ID)));
@@ -133,7 +133,7 @@ class EmployeeServiceImplIdorTest {
     void employeeCannotUpdateAnotherEmployeesProfile() {
         authenticateAs(OWN_EMAIL, "EMPLOYEE");
 
-        when(employeeRepository.findByEmail(OWN_EMAIL))
+        when(employeeRepository.findByEmailIgnoreCase(OWN_EMAIL))
                 .thenReturn(Optional.of(employeeWithId(OWN_ID)));
 
         UpdateEmployeeProfileRequest request =

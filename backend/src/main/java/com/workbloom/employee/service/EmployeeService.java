@@ -9,6 +9,7 @@ import com.workbloom.employee.dto.EmployeeSummaryResponse;
 import com.workbloom.employee.dto.UpdateEmployeeProfileRequest;
 import com.workbloom.employee.dto.UpdateEmployeeRequest;
 import com.workbloom.employee.dto.UpdateEmployeeStatusRequest;
+import com.workbloom.employee.entity.Employee;
 import com.workbloom.employee.entity.EmployeeStatus;
 
 
@@ -53,4 +54,29 @@ Page<EmployeeSummaryResponse> searchAndFilterEmployees(
     );
 
     void deactivateEmployee(Long id);
+
+    /**
+     * Resolves the Employee entity for an authenticated account by EMAIL
+     * (case-insensitive). The User id and the Employee id are different
+     * identifiers and must never be assumed equal.
+     *
+     * @throws com.workbloom.exception.ResourceNotFoundException if no
+     *         employee profile exists for that email
+     */
+    Employee getCurrentEmployee(String email);
+
+    /**
+     * Idempotently makes sure an Employee profile exists for the given
+     * account email. Returns the existing profile if there is one;
+     * otherwise creates a minimal ACTIVE profile (no salary, no
+     * department) keyed by the normalized email. Does not grant any
+     * role - roles live on the auth User only.
+     */
+    Employee ensureEmployeeProfile(String email, String fullName);
+
+    /**
+     * Throws AccessDeniedException if the caller has the EMPLOYEE role
+     * and employeeId is not their own record. HR/ADMIN are unaffected.
+     */
+    void verifySelfOrPrivilegedAccess(Long employeeId);
 }

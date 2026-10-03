@@ -1,12 +1,15 @@
 package com.workbloom.auth.serviceimpl;
 
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.UUID;
 
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.mail.MailException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.workbloom.auth.service.EmailService;
 import com.workbloom.auth.dto.AuthResponse;
@@ -23,7 +26,9 @@ import com.workbloom.auth.dto.ChangePasswordRequest;
 import com.workbloom.exception.BadRequestException;
 import com.workbloom.exception.ConflictException;
 import com.workbloom.exception.ForbiddenException;
+import com.workbloom.employee.service.EmployeeService;
 import com.workbloom.exception.ResourceNotFoundException;
+import com.workbloom.exception.ServiceUnavailableException;
 import com.workbloom.exception.UnauthorizedException;
 
 @Service
@@ -37,27 +42,49 @@ public class AuthServiceImpl implements AuthService {
 
     private final EmailService emailService;
 
-  public AuthServiceImpl(
-        UserRepository userRepository,
-        PasswordEncoder passwordEncoder,
-        JwtService jwtService,
-        EmailService emailService) {
+    private final EmployeeService employeeService;
 
-    this.userRepository = userRepository;
-    this.passwordEncoder = passwordEncoder;
-    this.jwtService = jwtService;
-    this.emailService = emailService;
-}
+    private static final Logger log =
+            LoggerFactory.getLogger(AuthServiceImpl.class);
+
+    private static final int MIN_PASSWORD_LENGTH = 8;
+
+    public AuthServiceImpl(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            JwtService jwtService,
+            EmailService emailService,
+            EmployeeService employeeService) {
+
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
+        this.emailService = emailService;
+        this.employeeService = employeeService;
+    }
+
+    // Trim + lowercase so 'A@x.com' and 'a@x.com' are one logical account.
+    private static String normalizeEmail(String email) {
+
+        if (email == null || email.trim().isEmpty()) {
+            throw new BadRequestException("Email is required.");
+        }
+
+        return email.trim().toLowerCase(Locale.ROOT);
+    }
 
     // =========================================================
     // REGISTER
     // =========================================================
 
     @Override
+    @Transactional
     public AuthResponse register(RegisterRequest request) {
 
-        // Check if email already exists
-        if (userRepository.existsByEmail(request.getEmail())) {
+        String email = normalizeEmail(request.getEmail());
+
+        // Check if email already exists (case-insensitive)
+        if (userRepository.existsByEmailIgnoreCase(email)) {
 
             throw new ConflictException(
                     "Email already exists."
@@ -69,7 +96,7 @@ public class AuthServiceImpl implements AuthService {
 
         user.setFullName(request.getFullName());
 
-        user.setEmail(request.getEmail());
+        user.setEmail(email);
 
         // Encrypt password
         user.setPassword(
@@ -87,6 +114,15 @@ public class AuthServiceImpl implements AuthService {
         // Save user
         User savedUser =
                 userRepository.save(user);
+
+        // Create the matching Employee profile in the same transaction,
+        // keyed by EMAIL (never by user id). The employee id is whatever
+        // PostgreSQL generates and is independent of the user id. Roles
+        // stay on the User; the profile carries no salary or HR rights.
+        employeeService.ensureEmployeeProfile(
+                savedUser.getEmail(),
+                savedUser.getFullName()
+        );
 
         // Create response
         AuthResponse response =
@@ -130,8 +166,8 @@ public class AuthServiceImpl implements AuthService {
 
         // Find user
         User user =
-                userRepository.findByEmail(
-                        request.getEmail()
+                userRepository.findByEmailIgnoreCase(
+                        normalizeEmail(request.getEmail())
                 ).orElseThrow(
                         () -> new UnauthorizedException(
                                 "User not found"
@@ -155,6 +191,20 @@ public class AuthServiceImpl implements AuthService {
             throw new ForbiddenException(
                     "User account is disabled"
             );
+        }
+
+        // Self-heal accounts created before registration provisioned an
+        // Employee profile (e.g. a User with no employees row). Idempotent:
+        // returns the existing profile when there is one. Login must not
+        // fail because of this, so errors are logged, not propagated.
+        try {
+            employeeService.ensureEmployeeProfile(
+                    user.getEmail(),
+                    user.getFullName()
+            );
+        } catch (RuntimeException ex) {
+            log.warn("Could not ensure employee profile for user id={}: {}",
+                    user.getId(), ex.getMessage());
         }
 
         // Create response
@@ -190,70 +240,82 @@ public class AuthServiceImpl implements AuthService {
         return response;
     }
 
+    // =========================================================
+    // FORGOT PASSWORD
+    // =========================================================
+
     @Override
-public String forgotPassword(
-        ForgotPasswordRequest request) {
-
-    String email = request.getEmail();
-
-    /*
-     * Always return the same response whether the account
-     * exists or not. This prevents email/account enumeration.
-     */
-    String genericMessage =
-            "If an account matches that email, "
-            + "reset instructions are on their way.";
-
-    User user =
-            userRepository.findByEmail(email)
-                    .orElse(null);
-
-    if (user == null) {
-        return genericMessage;
-    }
-
-    // Generate unique reset token
-    String resetToken =
-            UUID.randomUUID().toString();
-
-    // Token valid for 15 minutes
-    LocalDateTime expiry =
-            LocalDateTime.now()
-                    .plusMinutes(15);
-
-    // Save reset token
-    user.setResetToken(resetToken);
-    user.setResetTokenExpiry(expiry);
-
-    userRepository.save(user);
-
-    try {
-
-        emailService.sendPasswordResetEmail(
-                user.getEmail(),
-                user.getFullName(),
-                resetToken
-        );
-
-    } catch (MailException ex) {
+    public String forgotPassword(
+            ForgotPasswordRequest request) {
 
         /*
-         * Do not leave an active reset token if the email
-         * could not be sent.
+         * Always return the same response whether the account
+         * exists or not. This prevents email/account enumeration.
          */
-        user.setResetToken(null);
-        user.setResetTokenExpiry(null);
+        String genericMessage =
+                "If an account matches that email, "
+                + "reset instructions are on their way.";
+
+        String email = normalizeEmail(request.getEmail());
+
+        User user =
+                userRepository.findByEmailIgnoreCase(email)
+                        .orElse(null);
+
+        if (user == null) {
+            return genericMessage;
+        }
+
+        // Generate unique, unguessable reset token (UUIDv4 = 122 random bits)
+        String resetToken =
+                UUID.randomUUID().toString();
+
+        user.setResetToken(resetToken);
+        user.setResetTokenExpiry(
+                LocalDateTime.now().plusMinutes(
+                        EmailService.PASSWORD_RESET_EXPIRY_MINUTES)
+        );
+
         userRepository.save(user);
 
-        throw new RuntimeException(
-                "Unable to send password reset email. "
-                + "Please try again later.",
-                ex
-        );
-    }
+        try {
 
-    return genericMessage;
-}
+            emailService.sendPasswordResetEmail(
+                    user.getEmail(),
+                    user.getFullName(),
+                    resetToken
+            );
+
+        } catch (Exception ex) {
+
+            // Log the real root cause for the operator (auth failure,
+            // connection refused, TLS, missing MAIL_* env, ...). The token
+            // and credentials are never logged.
+            Throwable root = ex;
+            while (root.getCause() != null && root.getCause() != root) {
+                root = root.getCause();
+            }
+
+            log.error("Password reset email could not be sent for user id={}: "
+                    + "{} -> root cause: {}: {}",
+                    user.getId(),
+                    ex.getClass().getSimpleName(),
+                    root.getClass().getSimpleName(),
+                    root.getMessage());
+
+            // Do not leave an unusable-but-active reset token behind.
+            user.setResetToken(null);
+            user.setResetTokenExpiry(null);
+            userRepository.save(user);
+
+            // Generic client message: no SMTP details, no stack trace.
+            throw new ServiceUnavailableException(
+                    "We could not send the password reset email right now. "
+                    + "Please try again later.");
+        }
+
+        return genericMessage;
+    }
 
     // =========================================================
     // RESET PASSWORD
@@ -263,11 +325,19 @@ public String forgotPassword(
     public String resetPassword(
             ResetPasswordRequest request) {
 
+        if (request.getToken() == null
+                || request.getToken().trim().isEmpty()) {
+
+            throw new BadRequestException(
+                    "Reset token is required"
+            );
+        }
+
         // Find user using reset token
         User user =
                 userRepository
                         .findByResetToken(
-                                request.getToken()
+                                request.getToken().trim()
                         )
                         .orElseThrow(
                                 () -> new UnauthorizedException(
@@ -298,7 +368,15 @@ public String forgotPassword(
             );
         }
 
-        // Encrypt new password
+        if (request.getNewPassword().length() < MIN_PASSWORD_LENGTH) {
+
+            throw new BadRequestException(
+                    "Password must be at least "
+                    + MIN_PASSWORD_LENGTH + " characters"
+            );
+        }
+
+        // Encrypt new password (BCrypt via PasswordEncoder bean)
         user.setPassword(
                 passwordEncoder.encode(
                         request.getNewPassword()
@@ -332,7 +410,7 @@ public String changePassword(
 
     // Find user
     User user =
-            userRepository.findByEmail(email)
+            userRepository.findByEmailIgnoreCase(email)
                     .orElseThrow(
                             () -> new ResourceNotFoundException(
                                     "User not found"

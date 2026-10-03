@@ -169,8 +169,9 @@ function AuthLayout({ children, mode }) {
 function AuthPage({ kind, onSuccess }) {
   const isRegister = kind === 'register'
   const isForgot = kind === 'forgot'
+  const isReset = kind === 'reset'
   const { login, register } = useAuth()
-  const [form, setForm] = useState({ fullName: '', email: '', password: '', department: '', designation: '' })
+  const [form, setForm] = useState({ fullName: '', email: '', password: '', confirmPassword: '', department: '', designation: '' })
   const [status, setStatus] = useState({ busy: false, error: '', done: false })
   const update = (event) => setForm((current) => ({ ...current, [event.target.name]: event.target.value }))
 
@@ -180,6 +181,14 @@ function AuthPage({ kind, onSuccess }) {
     try {
       if (isForgot) {
         await authApi.forgotPassword({ email: form.email })
+        setStatus({ busy: false, error: '', done: true })
+      } else if (isReset) {
+        // The emailed link is /reset-password?token=...
+        const token = new URLSearchParams(window.location.search).get('token')
+        if (!token) throw new Error('This reset link is missing its token. Please request a new one.')
+        if (form.password.length < 8) throw new Error('Password must be at least 8 characters.')
+        if (form.password !== form.confirmPassword) throw new Error('Passwords do not match.')
+        await authApi.resetPassword({ token, newPassword: form.password })
         setStatus({ busy: false, error: '', done: true })
       } else if (isRegister) {
         const response = await register({
@@ -205,14 +214,16 @@ function AuthPage({ kind, onSuccess }) {
   return (
     <AuthLayout mode={kind}>
       <form className="card form-card" onSubmit={submit}>
-        <p className="eyebrow">{isForgot ? 'Reset access' : isRegister ? 'Join the room' : 'Welcome back'}</p>
-        <h1>{isForgot ? 'A fresh start.' : isRegister ? 'Come on in.' : 'Good morning.'}</h1>
-        <p className="subtitle">{isForgot ? 'Enter your work email and we will send reset instructions if the account is found.' : isRegister ? 'Create your space in a couple of minutes.' : 'Your people, plans, and small wins are waiting.'}</p>
+        <p className="eyebrow">{isReset ? 'Reset access' : isForgot ? 'Reset access' : isRegister ? 'Join the room' : 'Welcome back'}</p>
+        <h1>{isReset ? 'Choose a new password.' : isForgot ? 'A fresh start.' : isRegister ? 'Come on in.' : 'Good morning.'}</h1>
+        <p className="subtitle">{isReset ? 'Pick a new password for your WorkBloom account.' : isForgot ? 'Enter your work email and we will send reset instructions if the account is found.' : isRegister ? 'Create your space in a couple of minutes.' : 'Your people, plans, and small wins are waiting.'}</p>
         {status.error && <div className="alert" role="alert">{status.error}</div>}
-        {status.done && <div className="alert" role="status">If an account matches that email, reset instructions are on their way.</div>}
+        {status.done && isForgot && <div className="alert" role="status">If an account matches that email, reset instructions are on their way.</div>}
+        {status.done && isReset && <div className="alert" role="status">Your password has been reset. You can now sign in with your new password.</div>}
         {isRegister && <div className="field"><label htmlFor="fullName">Full name</label><input id="fullName" name="fullName" required value={form.fullName} onChange={update} autoComplete="name" /></div>}
-        <div className="field"><label htmlFor="email">Work email</label><input id="email" name="email" type="email" required value={form.email} onChange={update} autoComplete="email" /></div>
-        {!isForgot && <div className="field"><label htmlFor="password">Password</label><input id="password" name="password" type="password" required minLength="6" value={form.password} onChange={update} autoComplete={isRegister ? 'new-password' : 'current-password'} /></div>}
+        {!isReset && <div className="field"><label htmlFor="email">Work email</label><input id="email" name="email" type="email" required value={form.email} onChange={update} autoComplete="email" /></div>}
+        {!isForgot && <div className="field"><label htmlFor="password">{isReset ? 'New password' : 'Password'}</label><input id="password" name="password" type="password" required minLength={isReset ? 8 : 6} value={form.password} onChange={update} autoComplete={isRegister || isReset ? 'new-password' : 'current-password'} /></div>}
+        {isReset && <div className="field"><label htmlFor="confirmPassword">Confirm new password</label><input id="confirmPassword" name="confirmPassword" type="password" required minLength={8} value={form.confirmPassword} onChange={update} autoComplete="new-password" /></div>}
         {isRegister && (
           <div className="collection-grid" style={{ gap: 10, marginTop: 4 }}>
             <div className="field"><label htmlFor="department">Department</label><input id="department" name="department" value={form.department} onChange={update} placeholder="e.g. Design" /></div>
@@ -226,13 +237,13 @@ function AuthPage({ kind, onSuccess }) {
             </button>
           )}
           <button className="button button-primary" type="submit" disabled={status.busy}>
-            {status.busy ? 'One moment…' : isForgot ? 'Send instructions' : isRegister ? 'Create my space' : 'Enter WorkBloom'} <Icon name="arrow" size={15} />
+            {status.busy ? 'One moment…' : isReset ? 'Reset password' : isForgot ? 'Send instructions' : isRegister ? 'Create my space' : 'Enter WorkBloom'} <Icon name="arrow" size={15} />
           </button>
         </div>
         <p className="form-note">
-          {isForgot ? 'Remembered it? ' : isRegister ? 'Already have an account? ' : 'New to WorkBloom? '}
-          <a href={isForgot || isRegister ? '/login' : '/register'} onClick={(event) => { event.preventDefault(); window.history.pushState({}, '', event.currentTarget.getAttribute('href')); window.dispatchEvent(new PopStateEvent('popstate')) }}>
-            {isForgot || isRegister ? 'Back to sign in' : 'Create an account'}
+          {isForgot || isReset ? 'Remembered it? ' : isRegister ? 'Already have an account? ' : 'New to WorkBloom? '}
+          <a href={isForgot || isRegister || isReset ? '/login' : '/register'} onClick={(event) => { event.preventDefault(); window.history.pushState({}, '', event.currentTarget.getAttribute('href')); window.dispatchEvent(new PopStateEvent('popstate')) }}>
+            {isForgot || isRegister || isReset ? 'Back to sign in' : 'Create an account'}
           </a>
         </p>
       </form>
@@ -541,14 +552,14 @@ function MainApp() {
     const empId = user?.employeeId || user?.id || getEmployeeId()
     if (!empId) return
     try {
-      const fresh = await dashboardApi.getEmployeeDashboard(empId)
+      const fresh = await dashboardApi.getMyDashboard()
       updateUser({ ...fresh, ...overrides })
     } catch (e) {
       console.error(e)
     }
   }, [user?.id, user?.employeeId, updateUser])
 
-  const publicRoute = path === '/login' || path === '/register' || path === '/forgot-password' || path === '/'
+  const publicRoute = path === '/login' || path === '/register' || path === '/forgot-password' || path === '/reset-password' || path === '/'
 
   useEffect(() => {
     if (!isAuthenticated && !publicRoute) navigate('/login')
@@ -557,7 +568,7 @@ function MainApp() {
 
   if (!isAuthenticated || publicRoute) {
     if (isAuthenticated && publicRoute) return null
-    const kind = path === '/register' ? 'register' : path === '/forgot-password' ? 'forgot' : 'login'
+    const kind = path === '/register' ? 'register' : path === '/forgot-password' ? 'forgot' : path === '/reset-password' ? 'reset' : 'login'
     return (
       <AuthPage
         kind={kind}

@@ -102,6 +102,7 @@ public ResponseEntity<Page<EmployeeSummaryResponse>> getAllEmployees(
     @GetMapping("/me")
     public ResponseEntity<EmployeeProfileResponse> getMyProfile() {
 
+        // Identity comes only from the authenticated JWT principal (email).
         String authenticatedEmail =
                 SecurityContextHolder.getContext()
                         .getAuthentication()
