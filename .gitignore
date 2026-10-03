@@ -33,3 +33,5 @@ backend/bin/
 .env
 .env.*
 !.env.example
+# Frontend build output
+dist/
