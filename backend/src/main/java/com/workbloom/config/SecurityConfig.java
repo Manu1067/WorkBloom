@@ -23,12 +23,9 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    // Only matters for a real cross-origin deployment (frontend and
-    // backend on different domains/ports in production). In local dev,
-    // the Vite proxy (vite.config.js -> /spring-api) makes every request
-    // same-origin from the browser's perspective, so CORS headers are
-    // never actually checked - this does not change dev behavior.
-    // Comma-separated list, e.g.: https://app.workbloom.example.com
+    // Kept for compatibility with the existing configuration.
+    // CORS now uses allowed origin patterns so temporary
+    // Cloudflare Quick Tunnel URLs are accepted.
     @Value("${workbloom.cors.allowed-origins:http://localhost:3000,http://localhost:5173}")
     private String allowedOrigins;
 
@@ -45,14 +42,39 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
+
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of(allowedOrigins.split(",")));
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+
+        /*
+         * IMPORTANT:
+         * setAllowedOriginPatterns() is used instead of
+         * setAllowedOrigins() so that the temporary
+         * Cloudflare Quick Tunnel domain is accepted.
+         */
+        configuration.setAllowedOriginPatterns(List.of(
+                "http://localhost:3000",
+                "http://localhost:5173",
+                "https://*.trycloudflare.com"
+        ));
+
+        configuration.setAllowedMethods(List.of(
+                "GET",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE",
+                "OPTIONS"
+        ));
+
         configuration.setAllowedHeaders(List.of("*"));
+
         configuration.setAllowCredentials(true);
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
+
         source.registerCorsConfiguration("/**", configuration);
+
         return source;
     }
 
@@ -61,333 +83,345 @@ public class SecurityConfig {
             HttpSecurity http) throws Exception {
 
         http
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
-            // =========================================================
-            // DISABLE CSRF
-            // =========================================================
+                // =========================================================
+                // CORS
+                // =========================================================
 
-            .csrf(csrf -> csrf.disable())
-
-            // =========================================================
-            // JWT AUTHENTICATION IS STATELESS
-            // =========================================================
-
-            .sessionManagement(session ->
-                session.sessionCreationPolicy(
-                    SessionCreationPolicy.STATELESS
-                )
-            )
-
-            // =========================================================
-            // AUTHORIZATION RULES
-            // =========================================================
-
-            .authorizeHttpRequests(auth -> auth
-
-                // =====================================================
-                // PUBLIC AUTH ENDPOINTS
-                // =====================================================
-
-                .requestMatchers("/api/auth/**")
-                .permitAll()
-
-                // =====================================================
-                // STATIC DESTINATION IMAGES
-                // <img> tags cannot send the JWT header, so the public,
-                // non-personal image files served from
-                // src/main/resources/static/images/ must be readable.
-                // Only GET on /images/** - no API endpoint is opened.
-                // =====================================================
-
-                .requestMatchers(HttpMethod.GET, "/images/**")
-                .permitAll()
-
-                // Uploaded activity photos (Impact) are public, read-only
-                // static files for the same reason as /images/**.
-                .requestMatchers(HttpMethod.GET, "/uploads/**")
-                .permitAll()
-
-                // Uploading an Impact activity image is an organizer action -
-                // same roles that the UI offers "Schedule Initiative" to.
-                .requestMatchers(HttpMethod.POST, "/api/impact/events/image")
-                .hasAnyRole("HR", "ADMIN")
-
-                // Scheduling an Impact initiative is organizer-only. The UI
-                // already hides the form from other roles; enforce it here too
-                // (registration endpoints stay open to every employee).
-                .requestMatchers(HttpMethod.POST, "/api/impact/events")
-                .hasAnyRole("HR", "ADMIN")
-
-                // =====================================================
-                // WORKBLOOM MODULES
-                // =====================================================
-
-                // Dashboard employee view
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/api/dashboard/employee/**"
-                )
-                .hasAnyRole(
-                    "ADMIN",
-                    "HR",
-                    "EMPLOYEE"
+                .cors(cors ->
+                        cors.configurationSource(
+                                corsConfigurationSource()
+                        )
                 )
 
-                // Dashboard administration statistics
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/api/dashboard/admin"
-                )
-                .hasAnyRole(
-                    "ADMIN",
-                    "HR"
-                )
+                // =========================================================
+                // DISABLE CSRF
+                // =========================================================
 
-                // Analytics - organization-wide aggregate statistics
-                .requestMatchers(
-                    "/api/analytics/**"
-                )
-                .hasAnyRole(
-                    "ADMIN",
-                    "HR"
+                .csrf(csrf -> csrf.disable())
+
+                // =========================================================
+                // JWT AUTHENTICATION IS STATELESS
+                // =========================================================
+
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(
+                                SessionCreationPolicy.STATELESS
+                        )
                 )
 
-                // Travel, events, community, chat, and clubs are
-                // available to authenticated workforce members.
-                .requestMatchers(
-                    "/api/travel/**",
-                    "/api/events/**",
-                    "/api/community/**",
-                    "/api/chat/**",
-                    "/api/clubs/**"
+                // =========================================================
+                // AUTHORIZATION RULES
+                // =========================================================
+
+                .authorizeHttpRequests(auth -> auth
+
+                        // =====================================================
+                        // PUBLIC AUTH ENDPOINTS
+                        // =====================================================
+
+                        .requestMatchers("/api/auth/**")
+                        .permitAll()
+
+                        // =====================================================
+                        // STATIC DESTINATION IMAGES
+                        // =====================================================
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/images/**"
+                        )
+                        .permitAll()
+
+                        // =====================================================
+                        // UPLOADED IMPACT ACTIVITY IMAGES
+                        // =====================================================
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/uploads/**"
+                        )
+                        .permitAll()
+
+                        // =====================================================
+                        // IMPACT IMAGE UPLOAD
+                        // =====================================================
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/impact/events/image"
+                        )
+                        .hasAnyRole("HR", "ADMIN")
+
+                        // =====================================================
+                        // SCHEDULE IMPACT INITIATIVE
+                        // =====================================================
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/impact/events"
+                        )
+                        .hasAnyRole("HR", "ADMIN")
+
+                        // =====================================================
+                        // DASHBOARD EMPLOYEE VIEW
+                        // =====================================================
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/dashboard/employee/**"
+                        )
+                        .hasAnyRole(
+                                "ADMIN",
+                                "HR",
+                                "EMPLOYEE"
+                        )
+
+                        // =====================================================
+                        // DASHBOARD ADMIN STATISTICS
+                        // =====================================================
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/dashboard/admin"
+                        )
+                        .hasAnyRole(
+                                "ADMIN",
+                                "HR"
+                        )
+
+                        // =====================================================
+                        // ANALYTICS
+                        // =====================================================
+
+                        .requestMatchers(
+                                "/api/analytics/**"
+                        )
+                        .hasAnyRole(
+                                "ADMIN",
+                                "HR"
+                        )
+
+                        // =====================================================
+                        // TRAVEL, EVENTS, COMMUNITY, CHAT AND CLUBS
+                        // =====================================================
+
+                        .requestMatchers(
+                                "/api/travel/**",
+                                "/api/events/**",
+                                "/api/community/**",
+                                "/api/chat/**",
+                                "/api/clubs/**"
+                        )
+                        .hasAnyRole(
+                                "ADMIN",
+                                "HR",
+                                "EMPLOYEE"
+                        )
+
+                        // =====================================================
+                        // EMPLOYEE MANAGEMENT
+                        // HR + ADMIN
+                        // =====================================================
+
+                        // Create employee
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/employees"
+                        )
+                        .hasAnyRole("HR", "ADMIN")
+
+                        // Get all employees
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/employees"
+                        )
+                        .hasAnyRole("HR", "ADMIN")
+
+                        // Update employee HR details
+
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/api/employees/{id}"
+                        )
+                        .hasAnyRole("HR", "ADMIN")
+
+                        // Update employee status
+
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/api/employees/{id}/status"
+                        )
+                        .hasAnyRole("HR", "ADMIN")
+
+                        // Deactivate employee
+
+                        .requestMatchers(
+                                HttpMethod.DELETE,
+                                "/api/employees/{id}"
+                        )
+                        .hasAnyRole("HR", "ADMIN")
+
+                        // =====================================================
+                        // EMPLOYEE PROFILE
+                        // =====================================================
+
+                        // View employee profile
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/employees/{id}"
+                        )
+                        .hasAnyRole(
+                                "ADMIN",
+                                "HR",
+                                "EMPLOYEE"
+                        )
+
+                        // Update employee profile
+
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/api/employees/{id}/profile"
+                        )
+                        .hasAnyRole(
+                                "ADMIN",
+                                "HR",
+                                "EMPLOYEE"
+                        )
+
+                        // =====================================================
+                        // LEAVE MANAGEMENT
+                        // =====================================================
+
+                        // -----------------------------------------------------
+                        // Apply for leave
+                        // -----------------------------------------------------
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/leaves"
+                        )
+                        .hasAnyRole(
+                                "EMPLOYEE",
+                                "HR",
+                                "ADMIN"
+                        )
+
+                        // -----------------------------------------------------
+                        // View employee's leaves
+                        // -----------------------------------------------------
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/leaves/employee/**"
+                        )
+                        .hasAnyRole(
+                                "EMPLOYEE",
+                                "HR",
+                                "ADMIN"
+                        )
+
+                        // -----------------------------------------------------
+                        // View ALL leaves
+                        // -----------------------------------------------------
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/leaves"
+                        )
+                        .hasAnyRole(
+                                "HR",
+                                "ADMIN"
+                        )
+
+                        // -----------------------------------------------------
+                        // View specific leave
+                        // -----------------------------------------------------
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/leaves/*"
+                        )
+                        .hasAnyRole(
+                                "HR",
+                                "ADMIN"
+                        )
+
+                        // -----------------------------------------------------
+                        // Approve leave
+                        // -----------------------------------------------------
+
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/api/leaves/*/approve"
+                        )
+                        .hasAnyRole(
+                                "HR",
+                                "ADMIN"
+                        )
+
+                        // -----------------------------------------------------
+                        // Reject leave
+                        // -----------------------------------------------------
+
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/api/leaves/*/reject"
+                        )
+                        .hasAnyRole(
+                                "HR",
+                                "ADMIN"
+                        )
+
+                        // -----------------------------------------------------
+                        // Cancel leave
+                        // -----------------------------------------------------
+
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/api/leaves/*/cancel"
+                        )
+                        .hasAnyRole(
+                                "EMPLOYEE",
+                                "HR",
+                                "ADMIN"
+                        )
+
+                        // =====================================================
+                        // EVERYTHING ELSE
+                        // =====================================================
+
+                        .anyRequest()
+                        .authenticated()
                 )
-                .hasAnyRole(
-                    "ADMIN",
-                    "HR",
-                    "EMPLOYEE"
+
+                // =========================================================
+                // DISABLE BASIC AUTH
+                // =========================================================
+
+                .httpBasic(httpBasic ->
+                        httpBasic.disable()
                 )
 
+                // =========================================================
+                // DISABLE FORM LOGIN
+                // =========================================================
 
-                // =====================================================
-                // EMPLOYEE MANAGEMENT
-                // HR + ADMIN
-                // =====================================================
-
-                // Create employee
-                .requestMatchers(
-                    HttpMethod.POST,
-                    "/api/employees"
-                )
-                .hasAnyRole("HR", "ADMIN")
-
-
-                // Get all employees
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/api/employees"
-                )
-                .hasAnyRole("HR", "ADMIN")
-
-
-                // Update employee HR details
-                .requestMatchers(
-                    HttpMethod.PUT,
-                    "/api/employees/{id}"
-                )
-                .hasAnyRole("HR", "ADMIN")
-
-
-                // Update employee status
-                .requestMatchers(
-                    HttpMethod.PATCH,
-                    "/api/employees/{id}/status"
-                )
-                .hasAnyRole("HR", "ADMIN")
-
-
-                // Deactivate employee
-                .requestMatchers(
-                    HttpMethod.DELETE,
-                    "/api/employees/{id}"
-                )
-                .hasAnyRole("HR", "ADMIN")
-
-
-                // =====================================================
-                // EMPLOYEE PROFILE
-                // =====================================================
-
-                // View employee profile
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/api/employees/{id}"
-                )
-                .hasAnyRole(
-                    "ADMIN",
-                    "HR",
-                    "EMPLOYEE"
+                .formLogin(formLogin ->
+                        formLogin.disable()
                 )
 
+                // =========================================================
+                // JWT FILTER
+                // =========================================================
 
-                // Update employee profile
-                .requestMatchers(
-                    HttpMethod.PUT,
-                    "/api/employees/{id}/profile"
-                )
-                .hasAnyRole(
-                    "ADMIN",
-                    "HR",
-                    "EMPLOYEE"
-                )
-
-
-                // =====================================================
-                // LEAVE MANAGEMENT
-                // =====================================================
-
-                // -----------------------------------------------------
-                // Apply for leave
-                // EMPLOYEE + HR + ADMIN
-                // -----------------------------------------------------
-
-                .requestMatchers(
-                    HttpMethod.POST,
-                    "/api/leaves"
-                )
-                .hasAnyRole(
-                    "EMPLOYEE",
-                    "HR",
-                    "ADMIN"
-                )
-
-
-                // -----------------------------------------------------
-                // View employee's leaves
-                // EMPLOYEE + HR + ADMIN
-                // -----------------------------------------------------
-
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/api/leaves/employee/**"
-                )
-                .hasAnyRole(
-                    "EMPLOYEE",
-                    "HR",
-                    "ADMIN"
-                )
-
-
-                // -----------------------------------------------------
-                // View ALL leaves
-                // HR + ADMIN
-                // -----------------------------------------------------
-
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/api/leaves"
-                )
-                .hasAnyRole(
-                    "HR",
-                    "ADMIN"
-                )
-
-
-                // -----------------------------------------------------
-                // View specific leave
-                // HR + ADMIN
-                // -----------------------------------------------------
-
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/api/leaves/*"
-                )
-                .hasAnyRole(
-                    "HR",
-                    "ADMIN"
-                )
-
-
-                // -----------------------------------------------------
-                // Approve leave
-                // HR + ADMIN
-                // -----------------------------------------------------
-
-                .requestMatchers(
-                    HttpMethod.PATCH,
-                    "/api/leaves/*/approve"
-                )
-                .hasAnyRole(
-                    "HR",
-                    "ADMIN"
-                )
-
-
-                // -----------------------------------------------------
-                // Reject leave
-                // HR + ADMIN
-                // -----------------------------------------------------
-
-                .requestMatchers(
-                    HttpMethod.PATCH,
-                    "/api/leaves/*/reject"
-                )
-                .hasAnyRole(
-                    "HR",
-                    "ADMIN"
-                )
-
-
-                // -----------------------------------------------------
-                // Cancel leave
-                // EMPLOYEE + HR + ADMIN
-                // -----------------------------------------------------
-
-                .requestMatchers(
-                    HttpMethod.PATCH,
-                    "/api/leaves/*/cancel"
-                )
-                .hasAnyRole(
-                    "EMPLOYEE",
-                    "HR",
-                    "ADMIN"
-                )
-
-
-                // =====================================================
-                // EVERYTHING ELSE
-                // =====================================================
-
-                .anyRequest()
-                .authenticated()
-
-            )
-            // =========================================================
-            // DISABLE BASIC AUTH
-            // =========================================================
-
-            .httpBasic(httpBasic ->
-                httpBasic.disable()
-            )
-
-
-            // =========================================================
-            // DISABLE FORM LOGIN
-            // =========================================================
-
-            .formLogin(formLogin ->
-                formLogin.disable()
-            )
-
-
-            // =========================================================
-            // JWT FILTER
-            // =========================================================
-
-            .addFilterBefore(
-                jwtAuthenticationFilter,
-                UsernamePasswordAuthenticationFilter.class
-            );
+                .addFilterBefore(
+                        jwtAuthenticationFilter,
+                        UsernamePasswordAuthenticationFilter.class
+                );
 
         return http.build();
     }

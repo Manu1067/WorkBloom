@@ -1,0 +1,197 @@
+# WorkBloom - PostgreSQL + Spring Boot + React/nginx + n8n/Ollama AI
+#
+# Normal application:
+#   docker compose up -d --build
+#
+# Full application with AI:
+#   docker compose --profile ai up -d --build
+#
+# Open:
+#   http://localhost:3000
+#
+# n8n:
+#   http://localhost:5678
+
+name: workbloom
+
+services:
+
+  # ============================================================
+  # POSTGRESQL DATABASE
+  # ============================================================
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: workbloom
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d workbloom"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+
+  # ============================================================
+  # SPRING BOOT BACKEND
+  # ============================================================
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+
+    restart: unless-stopped
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+      n8n:
+        condition: service_started
+        required: false
+
+    environment:
+
+      # --------------------------------------------------------
+      # DATABASE
+      # --------------------------------------------------------
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/workbloom
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      # --------------------------------------------------------
+      # JWT
+      # --------------------------------------------------------
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (32+ characters)}
+
+      # --------------------------------------------------------
+      # GMAIL / EMAIL
+      # --------------------------------------------------------
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+
+      # --------------------------------------------------------
+      # FRONTEND
+      # --------------------------------------------------------
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
+      CORS_ALLOWED_ORIGINS: ${FRONTEND_BASE_URL:-http://localhost:3000}
+
+      # --------------------------------------------------------
+      # AI WELLNESS / N8N
+      #
+      # IMPORTANT:
+      # Inside Docker, backend reaches n8n using:
+      #
+      #     http://n8n:5678
+      #
+      # not localhost and not host.docker.internal.
+      # --------------------------------------------------------
+      N8N_WELLNESS_WEBHOOK_URL: ${N8N_WELLNESS_WEBHOOK_URL:-http://n8n:5678/webhook/workbloom/wellness}
+
+      # --------------------------------------------------------
+      # FILE UPLOADS
+      # --------------------------------------------------------
+      UPLOAD_DIR: /app/uploads
+
+      # --------------------------------------------------------
+      # TRAVEL SEED DATA
+      # --------------------------------------------------------
+      TRAVEL_SEED_DIR: /app/database/seed
+
+      # --------------------------------------------------------
+      # JAVA
+      # --------------------------------------------------------
+      JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75}
+
+    volumes:
+      - uploads:/app/uploads
+
+
+  # ============================================================
+  # REACT + NGINX FRONTEND
+  # ============================================================
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+
+      args:
+        VITE_MAP_TILE_URL: ${VITE_MAP_TILE_URL:-}
+
+    restart: unless-stopped
+
+    depends_on:
+      - backend
+
+    ports:
+      - "${WEB_PORT:-3000}:80"
+
+
+  # ============================================================
+  # N8N - AI WORKFLOW AUTOMATION
+  # ============================================================
+  n8n:
+    profiles:
+      - ai
+
+    image: n8nio/n8n:latest
+
+    restart: unless-stopped
+
+    ports:
+      - "127.0.0.1:5678:5678"
+
+    environment:
+
+      # n8n listens on all interfaces INSIDE the container
+      N8N_HOST: 0.0.0.0
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: http
+
+      # Browser URL for local development
+      WEBHOOK_URL: http://localhost:5678/
+
+      # Disable telemetry for local project use
+      N8N_DIAGNOSTICS_ENABLED: "false"
+
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+
+  # ============================================================
+  # OLLAMA - LOCAL AI MODEL SERVER
+  # ============================================================
+  ollama:
+    profiles:
+      - ai
+
+    image: ollama/ollama:latest
+
+    restart: unless-stopped
+
+    volumes:
+      - ollama_data:/root/.ollama
+
+
+# ==============================================================
+# PERSISTENT VOLUMES
+# ==============================================================
+volumes:
+
+  # PostgreSQL database
+  pgdata:
+
+  # WorkBloom uploaded files
+  uploads:
+
+  # n8n workflows, credentials and configuration
+  n8n_data:
+
+  # Ollama downloaded models
+  ollama_data:

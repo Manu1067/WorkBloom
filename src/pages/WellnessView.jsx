@@ -4,7 +4,6 @@ import { getEmployeeId } from '../api/apiClient'
 import { useToast } from '../components/ToastContext'
 import { PageHero } from '../components/PageHero'
 import { AiRecommendation } from '../components/wellness/AiRecommendation'
-import { formatWellnessScore } from '../utils/safeMarkdown'
 
 // The backend waits up to 120s for n8n/Ollama (workbloom.http-client.read-timeout-ms).
 // The browser waits a little longer so the server's own answer/error wins.
@@ -288,9 +287,13 @@ export function WellnessView({ user, navigate, onUserUpdate }) {
           </div>
 
           {(() => {
-            // Score is shown exactly as the backend returned it (0-100 scale).
-            const scoreText = formatWellnessScore(aiInsight.wellnessScore)
-            const scoreNum = Number(aiInsight.wellnessScore)
+            // Backend wellnessScore is on a 10-point scale (e.g. 7.17). Convert once,
+            // for display only; aiInsight.wellnessScore itself is never modified.
+            const rawScore = aiInsight.wellnessScore
+            const parsedScore = rawScore === null || rawScore === undefined || rawScore === '' ? NaN : Number(rawScore)
+            const displayWellnessScore = Number.isFinite(parsedScore) ? Math.round(parsedScore * 10) : null
+            const scoreText = displayWellnessScore === null ? null : String(displayWellnessScore)
+            const scoreNum = displayWellnessScore ?? 0
             const risk = aiInsight.riskLevel
               ? RISK_STYLES[String(aiInsight.riskLevel).toUpperCase()] || { label: String(aiInsight.riskLevel), color: 'hsl(var(--sage-dark))', bg: 'hsl(var(--paper-warm))' }
               : null

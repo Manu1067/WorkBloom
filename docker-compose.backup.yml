@@ -1,0 +1,99 @@
+# WorkBloom - PostgreSQL + Spring Boot + React/nginx (+ optional n8n/Ollama)
+#
+#   cp .env.docker.example .env     # then edit the values
+#   docker compose up -d --build
+#   open http://localhost:3000
+#
+# Optional local AI stack:  docker compose --profile ai up -d --build
+
+name: workbloom
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: workbloom
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d workbloom"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # Not published to the host by default. Uncomment to use pgAdmin locally:
+    # ports:
+    #   - "127.0.0.1:5432:5432"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # application.properties hardcodes localhost; this env var overrides it
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/workbloom
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (32+ characters)}
+      # Password-reset email (Gmail needs an App Password)
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      # Public URL users open in the browser (used in reset-email links + CORS)
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
+      CORS_ALLOWED_ORIGINS: ${FRONTEND_BASE_URL:-http://localhost:3000}
+      # AI Wellness: n8n webhook. Default = n8n running on the Docker HOST.
+      # With --profile ai use http://n8n:5678/webhook/workbloom/wellness
+      N8N_WELLNESS_WEBHOOK_URL: ${N8N_WELLNESS_WEBHOOK_URL:-http://host.docker.internal:5678/webhook/workbloom/wellness}
+      UPLOAD_DIR: /app/uploads
+      TRAVEL_SEED_DIR: /app/database/seed
+      JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # makes host.docker.internal work on Linux too
+    volumes:
+      - uploads:/app/uploads
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        VITE_MAP_TILE_URL: ${VITE_MAP_TILE_URL:-}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${WEB_PORT:-3000}:80"
+
+  # ---------------- optional AI stack (docker compose --profile ai ...) -----
+  n8n:
+    profiles: ["ai"]
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost:5678/
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  ollama:
+    profiles: ["ai"]
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  pgdata:
+  uploads:
+  n8n_data:
+  ollama_data:

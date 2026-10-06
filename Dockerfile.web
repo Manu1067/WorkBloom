@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1
+# React/Vite frontend built to static files and served by nginx, which also
+# proxies /spring-api, /images and /uploads to the Spring Boot container.
+# (The legacy server.js / server-api.js mock server is NOT used in production.)
+
+# ---------- build ----------
+FROM node:22-slim AS build
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Vite 8 uses rolldown's native binding. A lockfile generated on Windows/macOS
+# may not list the Linux binding, so make sure the one for THIS image exists.
+RUN set -eu; \
+    case "$(uname -m)" in \
+      x86_64)  p=linux-x64-gnu ;; \
+      aarch64) p=linux-arm64-gnu ;; \
+      *) echo "unsupported arch $(uname -m)"; exit 1 ;; \
+    esac; \
+    v="$(node -p "require('./node_modules/rolldown/package.json').version")"; \
+    npm i --no-save --no-package-lock --ignore-scripts "@rolldown/binding-$p@$v"
+
+# vite.config.js imports server-api.js (dev-only middleware), so it must exist
+COPY index.html vite.config.js server-api.js ./
+COPY public ./public
+COPY src ./src
+
+# Optional: custom map tile server baked into the bundle
+ARG VITE_MAP_TILE_URL=""
+ENV VITE_MAP_TILE_URL=${VITE_MAP_TILE_URL}
+RUN npm run build
+
+# ---------- serve ----------
+FROM nginx:1.27-alpine
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 80

@@ -1,0 +1,19 @@
+# Keep the build context small and never ship secrets or local build output
+.git
+.gitignore
+.env
+.env.*
+!.env.docker.example
+node_modules
+dist
+backend/target
+backend/bin
+backend/uploads
+backend/.mvn/wrapper/maven-wrapper.jar
+frontend
+scrrenshots
+postman
+*.log
+.vscode
+.idea
+**/.DS_Store

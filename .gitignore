@@ -35,3 +35,5 @@ backend/bin/
 !.env.example
 # Frontend build output
 dist/
+
+workbloom_backup.sql
