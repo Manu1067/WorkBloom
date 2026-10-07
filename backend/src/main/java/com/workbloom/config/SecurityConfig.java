@@ -26,9 +26,8 @@ public class SecurityConfig {
     // Kept for compatibility with the existing configuration.
     // CORS now uses allowed origin patterns so temporary
     // Cloudflare Quick Tunnel URLs are accepted.
-    @Value("${workbloom.cors.allowed-origins:http://localhost:3000,http://localhost:5173}")
-    private String allowedOrigins;
-
+   @Value("${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}")
+  private String allowedOrigins;
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthenticationFilter) {
 
