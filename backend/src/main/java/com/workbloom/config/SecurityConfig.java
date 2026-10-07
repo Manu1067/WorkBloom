@@ -1,6 +1,8 @@
 package com.workbloom.config;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -23,11 +25,18 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    // Kept for compatibility with the existing configuration.
-    // CORS now uses allowed origin patterns so temporary
-    // Cloudflare Quick Tunnel URLs are accepted.
-   @Value("${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}")
-  private String allowedOrigins;
+    /*
+     * CORS allowed origins.
+     *
+     * Production:
+     * CORS_ALLOWED_ORIGINS=https://workbloom-frontend.onrender.com
+     *
+     * Local development fallback:
+     * http://localhost:3000,http://localhost:5173
+     */
+    @Value("${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}")
+    private String allowedOrigins;
+
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthenticationFilter) {
 
@@ -46,15 +55,23 @@ public class SecurityConfig {
 
         /*
          * IMPORTANT:
-         * setAllowedOriginPatterns() is used instead of
-         * setAllowedOrigins() so that the temporary
-         * Cloudflare Quick Tunnel domain is accepted.
+         *
+         * Use the origins supplied through CORS_ALLOWED_ORIGINS.
+         *
+         * This is required for the deployed Render frontend:
+         *
+         * https://workbloom-frontend.onrender.com
+         *
+         * We use allowed origin patterns so localhost and temporary
+         * Cloudflare Quick Tunnel URLs can also be supported.
          */
-        configuration.setAllowedOriginPatterns(List.of(
-                "http://localhost:3000",
-                "http://localhost:5173",
-                "https://*.trycloudflare.com"
-        ));
+        List<String> configuredOrigins = Arrays.stream(
+                        allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .collect(Collectors.toList());
+
+        configuration.setAllowedOriginPatterns(configuredOrigins);
 
         configuration.setAllowedMethods(List.of(
                 "GET",
@@ -224,7 +241,6 @@ public class SecurityConfig {
                         // =====================================================
 
                         // Create employee
-
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/employees"
@@ -232,7 +248,6 @@ public class SecurityConfig {
                         .hasAnyRole("HR", "ADMIN")
 
                         // Get all employees
-
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/employees"
@@ -240,7 +255,6 @@ public class SecurityConfig {
                         .hasAnyRole("HR", "ADMIN")
 
                         // Update employee HR details
-
                         .requestMatchers(
                                 HttpMethod.PUT,
                                 "/api/employees/{id}"
@@ -248,7 +262,6 @@ public class SecurityConfig {
                         .hasAnyRole("HR", "ADMIN")
 
                         // Update employee status
-
                         .requestMatchers(
                                 HttpMethod.PATCH,
                                 "/api/employees/{id}/status"
@@ -256,7 +269,6 @@ public class SecurityConfig {
                         .hasAnyRole("HR", "ADMIN")
 
                         // Deactivate employee
-
                         .requestMatchers(
                                 HttpMethod.DELETE,
                                 "/api/employees/{id}"
@@ -268,7 +280,6 @@ public class SecurityConfig {
                         // =====================================================
 
                         // View employee profile
-
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/employees/{id}"
@@ -280,7 +291,6 @@ public class SecurityConfig {
                         )
 
                         // Update employee profile
-
                         .requestMatchers(
                                 HttpMethod.PUT,
                                 "/api/employees/{id}/profile"
@@ -295,10 +305,7 @@ public class SecurityConfig {
                         // LEAVE MANAGEMENT
                         // =====================================================
 
-                        // -----------------------------------------------------
                         // Apply for leave
-                        // -----------------------------------------------------
-
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/leaves"
@@ -309,10 +316,7 @@ public class SecurityConfig {
                                 "ADMIN"
                         )
 
-                        // -----------------------------------------------------
                         // View employee's leaves
-                        // -----------------------------------------------------
-
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/leaves/employee/**"
@@ -323,10 +327,7 @@ public class SecurityConfig {
                                 "ADMIN"
                         )
 
-                        // -----------------------------------------------------
                         // View ALL leaves
-                        // -----------------------------------------------------
-
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/leaves"
@@ -336,10 +337,7 @@ public class SecurityConfig {
                                 "ADMIN"
                         )
 
-                        // -----------------------------------------------------
                         // View specific leave
-                        // -----------------------------------------------------
-
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/leaves/*"
@@ -349,10 +347,7 @@ public class SecurityConfig {
                                 "ADMIN"
                         )
 
-                        // -----------------------------------------------------
                         // Approve leave
-                        // -----------------------------------------------------
-
                         .requestMatchers(
                                 HttpMethod.PATCH,
                                 "/api/leaves/*/approve"
@@ -362,10 +357,7 @@ public class SecurityConfig {
                                 "ADMIN"
                         )
 
-                        // -----------------------------------------------------
                         // Reject leave
-                        // -----------------------------------------------------
-
                         .requestMatchers(
                                 HttpMethod.PATCH,
                                 "/api/leaves/*/reject"
@@ -375,10 +367,7 @@ public class SecurityConfig {
                                 "ADMIN"
                         )
 
-                        // -----------------------------------------------------
                         // Cancel leave
-                        // -----------------------------------------------------
-
                         .requestMatchers(
                                 HttpMethod.PATCH,
                                 "/api/leaves/*/cancel"
