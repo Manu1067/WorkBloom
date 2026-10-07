@@ -3,7 +3,7 @@
  * Intercepts, formats, and executes requests against the Spring Boot Backend.
  */
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/spring-api';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://workbloom-backend.onrender.com/api';
 
 export class ApiError extends Error {
   constructor(message, status, data = null) {
